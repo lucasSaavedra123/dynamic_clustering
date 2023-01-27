@@ -177,8 +177,8 @@ class Cluster():
     valid_new_shape = False
 
     while not valid_new_shape:
-      new_width = self.width + np.random.normal(0, 0.00025)
-      new_height = self.height + np.random.normal(0, 0.00025)
+      new_width = self.width + np.random.normal(0, 0.0001)
+      new_height = self.height + np.random.normal(0, 0.0001)
  
       if new_width < self.radio * 2 or new_height < self.radio * 2 or self.eccentricity > self.eccentricity_maximum:
         valid_new_shape = False

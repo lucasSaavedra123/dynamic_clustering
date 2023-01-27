@@ -29,21 +29,21 @@ an_experiment = Experiment(
 )
 
 print("Primera foto...")
-an_experiment.plot(show=False)
-plt.savefig(f"./images/{str(0).zfill(5)}.jpg", dpi=200)
-plt.clf()
+#an_experiment.plot(show=False)
+#plt.savefig(f"./images/{str(0).zfill(5)}.jpg", dpi=200)
+#plt.clf()
 
 clustered_molecules = []
 non_clustered_molecules = []
 
-for i in range(1, 100):
+for i in range(1, 7000):
     print("Step:", i)
     an_experiment.move()
-    print(an_experiment.percentage_of_clustered_molecules)
-    print("Ploting...", i)
-    an_experiment.plot(show=False)
-    plt.savefig(f"./images/{str(i).zfill(5)}.jpg", dpi=200)
-    plt.clf()
+    #print(an_experiment.percentage_of_clustered_molecules)
+    #print("Ploting...", i)
+    #an_experiment.plot(show=False)
+    #plt.savefig(f"./images/{str(i).zfill(5)}.jpg", dpi=200)
+    #plt.clf()
     clustered_molecules += [an_experiment.clustered_molecules]
     non_clustered_molecules += [an_experiment.non_clustered_molecules]
 
