@@ -50,16 +50,15 @@ class Particle():
             new_y = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[1] + original_cluster_direction_movement[1]
             new_radio_from_center = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
 
-          if new_radio_from_center > self.cluster.radio:
+          if not self.cluster.is_inside(position=np.array([new_x, new_y])):
             self.going_out_from_cluster = False
             self.cluster = None
             self.diffusion_coefficient = np.random.uniform(self.experiment.no_cluster_molecules_diffusion_coefficient_range[0], self.experiment.no_cluster_molecules_diffusion_coefficient_range[1])
 
         else:
-          while new_radio_from_center > self.cluster.radio:
+          while not self.cluster.is_inside(position=np.array([new_x, new_y])):
             new_x = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[0] + original_cluster_direction_movement[0]
             new_y = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[1] + original_cluster_direction_movement[1]
-            new_radio_from_center = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
         
         if self.can_be_retained and self.cluster is not None and not self.going_out_from_cluster:
           self.locked = np.random.choice([False, True], 1, p=[0.95, 0.05])[0]

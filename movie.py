@@ -7,21 +7,21 @@ import os
 import glob
 
 #accessing path of each image
-for image_string in os.listdir('images_with_high_clustering/'):
+for image_string in os.listdir('images/'):
     if image_string.endswith(".jpg"):
-        base_width = 400
-        image = Image.open(os.path.join('images_with_high_clustering/', image_string))
+        base_width = 500
+        image = Image.open(os.path.join('images/', image_string))
         width_percent = (base_width / float(image.size[0]))
         hsize = int((float(image.size[1]) * float(width_percent)))
         image = image.resize((base_width, hsize), PIL.Image.ANTIALIAS)
-        image.save(os.path.join('lower_resolution_images/', image_string))
+        image.save(os.path.join('low_images/', image_string))
 
 img_clips = []
 path_list=[]
 #accessing path of each image
-for image in os.listdir('lower_resolution_images/'):
+for image in os.listdir('low_images/'):
     if image.endswith(".jpg"):
-        path_list.append(os.path.join('lower_resolution_images/', image))
+        path_list.append(os.path.join('low_images/', image))
 #creating slide for each image
 for img_path in path_list:
   slide = ImageClip(img_path,duration=0.1)

@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
 from scipy.stats import skewnorm
 
 from Cluster import Cluster
@@ -32,6 +33,7 @@ class Experiment():
                lifetime_skewness,
                lifetime_mean,
                lifetime_std,
+               eccentricity_maximum,
                minimum_level_of_percentage_molecules,
                average_molecules_per_frame,
                frame_rate,
@@ -53,6 +55,8 @@ class Experiment():
     self.residence_time_range = residence_time_range
     self.number_of_particles_per_cluster_range = number_of_particles_per_cluster_range
 
+    self.eccentricity_maximum = eccentricity_maximum
+
     self.lifetime_range = lifetime_range
     self.lifetime_std = lifetime_std
     self.lifetime_skewness = lifetime_skewness
@@ -71,13 +75,13 @@ class Experiment():
   
     for cluster_index in range(np.random.randint(number_of_clusters_range[0], number_of_clusters_range[1]+1)):
       lifetime = generate_skewed_normal_distribution(self.lifetime_mean, self.lifetime_std, self.lifetime_skewness, self.lifetime_range[0], self.lifetime_range[1])
-      print(lifetime)
       self.clusters.append(Cluster(
           np.random.uniform(radio_range[0], radio_range[1]),
           [np.random.uniform(0, width), np.random.uniform(0, height)],
           np.random.randint(number_of_particles_per_cluster_range[0], number_of_particles_per_cluster_range[1]+1),
           np.random.uniform(self.cluster_centroids_diffusion_coefficient_range[0], self.cluster_centroids_diffusion_coefficient_range[1]),
           lifetime,
+          eccentricity_maximum,
           self
         )
       )
@@ -137,7 +141,8 @@ class Experiment():
         if not self.plots_with_blinking or particle.blinking_battery != 0:
           ax.scatter(particle.position_at(t)[0], particle.position_at(t)[1], color=particle.color, s=particle_size)
 
-      ax.add_patch(plt.Circle( cluster.positions[t,:], cluster.radio , fill = False))
+      ax.add_patch(Ellipse( xy=cluster.position_at(t), width=cluster.width, height=cluster.height, angle=cluster.angle*360, fill = False))
+      ax.add_patch(plt.Circle( cluster.positions[t,:], cluster.radio , fill = False , linestyle='--'))
       #ax.add_patch(plt.Circle( cluster.positions[t,:], cluster.outer_region.max_radio , fill = False , linestyle='--'))
       #ax.add_patch(plt.Circle( cluster.positions[t,:], cluster.inner_region.min_radio , fill = False , linestyle='--'))
       #ax.add_patch(plt.Circle( cluster.positions[t,:], cluster.center_region.max_radio , fill = False , linestyle='--'))

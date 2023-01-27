@@ -20,6 +20,7 @@ an_experiment = Experiment(
     3,
     500,
     2000,
+    0.7,
     0.85,
     1,
     10e-3, #frame_rate
@@ -28,25 +29,25 @@ an_experiment = Experiment(
 )
 
 print("Primera foto...")
-#an_experiment.plot(show=False)
-#plt.savefig(f"images_with_high_clustering/{str(0).zfill(5)}.jpg", dpi=200)
-#plt.clf()
+an_experiment.plot(show=False)
+plt.savefig(f"./images/{str(0).zfill(5)}.jpg", dpi=200)
+plt.clf()
 
 clustered_molecules = []
 non_clustered_molecules = []
 
-for i in range(1, 7000):
+for i in range(1, 100):
     print("Step:", i)
     an_experiment.move()
-    #print(an_experiment.percentage_of_clustered_molecules)
-    #print("Ploting...", i)
-    #an_experiment.plot(show=False)
-    #plt.savefig(f"images_with_high_clustering/{str(i).zfill(5)}.jpg", dpi=200)
-    #plt.clf()
+    print(an_experiment.percentage_of_clustered_molecules)
+    print("Ploting...", i)
+    an_experiment.plot(show=False)
+    plt.savefig(f"./images/{str(i).zfill(5)}.jpg", dpi=200)
+    plt.clf()
     clustered_molecules += [an_experiment.clustered_molecules]
     non_clustered_molecules += [an_experiment.non_clustered_molecules]
 
-
+"""
 plt.plot(clustered_molecules, label="Clustered molecules", color="red")
 plt.plot(non_clustered_molecules, label="Non clustered molecules", color="black")
 plt.grid()
@@ -54,5 +55,6 @@ plt.legend()
 plt.xlabel("Time (frame)")
 plt.xlabel("Number of molecules")
 plt.show()
+"""
 
 #an_experiment.build_smlm_dataset_as_dataframe().to_csv("smlm_dataset.csv", index=False)
