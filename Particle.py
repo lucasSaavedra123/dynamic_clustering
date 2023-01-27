@@ -61,7 +61,9 @@ class Particle():
             new_y = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[1] + original_cluster_direction_movement[1]
         
         if self.can_be_retained and self.cluster is not None and not self.going_out_from_cluster:
-          self.locked = np.random.choice([False, True], 1, p=[0.95, 0.05])[0]
+          p = self.cluster.probability_to_be_retained(self)
+          print(p)
+          self.locked = np.random.choice([True, False], 1, p=[p, 1-p])[0]
 
       else:
         new_x = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[0]

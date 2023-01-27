@@ -7,7 +7,6 @@ from scipy.stats import skewnorm
 from Cluster import Cluster
 from Particle import Particle
 
-import random
 from math import ceil
 
 def generate_skewed_normal_distribution(mean, std, skewness, min_value, max_value):
@@ -29,12 +28,14 @@ class Experiment():
                cluster_centroids_diffusion_coefficient_range,
                no_cluster_molecules_diffusion_coefficient_range,
                residence_time_range,
+               retention_probabilities_functions_for_each_cluster,
                lifetime_range,
                lifetime_skewness,
                lifetime_mean,
                lifetime_std,
                eccentricity_maximum,
                minimum_level_of_percentage_molecules,
+               max_retention_probability,
                average_molecules_per_frame,
                frame_rate,
                plots_with_blinking = False,
@@ -43,6 +44,7 @@ class Experiment():
 
     self.height = height
     self.width = width
+    self.max_retention_probability = max_retention_probability
     self.frame_rate = frame_rate
     self.average_molecules_per_frame = average_molecules_per_frame
     self.cluster_centroids_diffusion_coefficient_range = cluster_centroids_diffusion_coefficient_range
@@ -80,6 +82,7 @@ class Experiment():
           [np.random.uniform(0, width), np.random.uniform(0, height)],
           np.random.randint(number_of_particles_per_cluster_range[0], number_of_particles_per_cluster_range[1]+1),
           np.random.uniform(self.cluster_centroids_diffusion_coefficient_range[0], self.cluster_centroids_diffusion_coefficient_range[1]),
+          np.random.choice(retention_probabilities_functions_for_each_cluster, 1)[0],
           lifetime,
           eccentricity_maximum,
           self
@@ -215,25 +218,27 @@ class Experiment():
 
     if self.first_recharge == True:
       self.first_recharge = False
-      self.current_average_molecules_per_frame = ceil(self.average_molecules_per_frame)
       particles_that_will_blink = np.random.choice(all_particles, ceil(self.average_molecules_per_frame), replace=False)
-      
+
       for particle in particles_that_will_blink:
           particle.blinking_battery = np.random.randint(2, 6)
 
+      self.localizations_that_appear_until_now = 0
+
     else:
       number_of_particles_currently_blinking = len([particle for particle in all_particles if particle.blinking_battery != 0])
-      numerator = self.current_average_molecules_per_frame * (self.time+1)
+      current_average_molecules_per_frame = (self.localizations_that_appear_until_now+number_of_particles_currently_blinking)/(self.time+1)
 
-      if (numerator + number_of_particles_currently_blinking)/(self.time+1) < self.average_molecules_per_frame:
-        number_of_particles_not_currently_blinking = len([particle for particle in all_particles if particle.blinking_battery == 0])
-        x = ceil(self.average_molecules_per_frame * (self.time+1) - numerator - number_of_particles_currently_blinking)
+      if current_average_molecules_per_frame < self.average_molecules_per_frame:
+        number_of_particles_not_currently_blinking = [particle for particle in all_particles if particle.blinking_battery == 0]
+        x = abs(ceil(self.average_molecules_per_frame * (self.time+1) - current_average_molecules_per_frame * (self.time+1) - number_of_particles_currently_blinking))
         particles_that_will_blink = np.random.choice(number_of_particles_not_currently_blinking, x, replace=False)
-        self.current_average_molecules_per_frame = (numerator + number_of_particles_currently_blinking + x)/(self.time+1)
 
         for particle in particles_that_will_blink:
-            particle.blinking_battery = np.random.randint(2, 6)
+          particle.blinking_battery = np.random.randint(2, 6)      
 
+      self.localizations_that_appear_until_now += len([particle for particle in all_particles if particle.blinking_battery != 0])
+            
   def update_percentage_of_clustered_molecules(self):
     self.clustered_molecules = 0
     self.non_clustered_molecules = 0

@@ -1,7 +1,5 @@
 import numpy as np
 
-from Region import *
-
 from Particle import Particle
 
 from hypo import Hypoexponential
@@ -63,18 +61,15 @@ class Cluster():
     particle.residence_time = Hypoexponential(self.experiment.residence_time_range).sample(1)[0]
     particle.time_belonging_cluster = self.experiment.current_time
 
-  def __init__(self, radio, initial_position, number_of_initial_particles, centroid_diffusion_coefficient, lifetime, eccentricity_maximum, experiment):
+  def __init__(self, radio, initial_position, number_of_initial_particles, centroid_diffusion_coefficient, retention_probability_function, lifetime, eccentricity_maximum, experiment):
     self.radio = radio
-    self.outer_region = OuterRegion(self)
-    self.inner_region = InnerRegion(self)
-    self.center_region = CenterRegion(self)
-    self.middle_region = MiddleRegion(self)
     self.number_of_particles_leaving_cluster = 0
     self.positions = np.array([initial_position])
     self.particles = []
     self.experiment = experiment
     self.number_of_particles_going_out = 0
     self.eccentricity_maximum = eccentricity_maximum
+    self.retention_probability_function = retention_probability_function() # We create an instance of it
 
     bad_initial_shape = True
 
@@ -126,17 +121,9 @@ class Cluster():
           )
         )
 
-  def probability_to_be_retained(self, radio):
-    if self.outer_region.inside_region(radio):
-      return self.outer_region.probability_to_be_retained
-    elif self.inner_region.inside_region(radio):
-      return self.inner_region.probability_to_be_retained
-    elif self.center_region.inside_region(radio):
-      return self.center_region.probability_to_be_retained
-    elif self.middle_region.inside_region(radio):
-      return self.middle_region.probability_to_be_retained
-    else:
-      return 0
+  def probability_to_be_retained(self, particle):
+    assert particle in self.particles
+    return self.retention_probability_function(particle)
 
   def move(self):
     particles_without_cluster = []
@@ -179,7 +166,8 @@ class Cluster():
     while not valid_new_shape:
       new_width = self.width + np.random.normal(0, 0.0001)
       new_height = self.height + np.random.normal(0, 0.0001)
- 
+      new_angle = self.angle + np.random.normal(0, 0.01)
+
       if new_width < self.radio * 2 or new_height < self.radio * 2 or self.eccentricity > self.eccentricity_maximum:
         valid_new_shape = False
       else:
@@ -187,3 +175,4 @@ class Cluster():
 
     self.width = max(new_width, max(self.experiment.radio_range))
     self.height = max(new_height, max(self.experiment.radio_range))
+    self.angle = new_angle
