@@ -106,27 +106,6 @@ class Experiment():
     self.recharge_batteries()
     self.update_smlm_dataset()
 
-  def scan_for_new_clusters(self):
-    new_clusters = True
-
-    while new_clusters:
-      random_radio = np.random.uniform(self.radio_range[0], self.radio_range[1])
-      cluster_created = False
-      for particle in self.particles_without_cluster:
-        particles_near_particle = [aux_particle for aux_particle in self.particles_without_cluster if aux_particle != particle and np.linalg.norm(particle.position_at(-1) - aux_particle.position_at(-1)) <= random_radio]
-
-        if len(particles_near_particle) >= self.number_of_particles_per_cluster_range[0]:
-          cluster_created = True
-          print("Creamos Cluster!!!")
-          new_cluster = Cluster(random_radio, particle.position_at(-1), 0, np.random.uniform(self.cluster_centroids_diffusion_coefficient_range[0], self.cluster_centroids_diffusion_coefficient_range[1]), 20, self)
-          for aux_particle in particles_near_particle:
-            new_cluster.add_particle(aux_particle)
-            self.particles_without_cluster.remove(aux_particle)
-          self.clusters.append(new_cluster)
-          break
-        
-      new_clusters = cluster_created
-
   def plot(self, t=None, show=False):
     if t is None:
       t = -1
@@ -201,7 +180,6 @@ class Experiment():
 
     self.particles_without_cluster = new_particles_without_cluster
 
-    #self.scan_for_new_clusters()
     self.update_percentage_of_clustered_molecules()
     self.recharge_batteries()
     self.update_smlm_dataset()
