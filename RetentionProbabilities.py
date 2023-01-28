@@ -62,6 +62,7 @@ class RetentionProbabilityWithCuadraticFunction():
 
   def __call__(self, particle):
     max_probability = particle.experiment.max_retention_probability
+    min_probability = particle.experiment.min_retention_probability
 
     if particle is not None:
       x = particle.position_at(-1)[0]
@@ -82,12 +83,13 @@ class RetentionProbabilityWithCuadraticFunction():
     xct = xc * cos_angle - yc * sin_angle
     yct = xc * sin_angle + yc * cos_angle 
   
-    return max(0, - ((xct/np.sqrt(1/max_probability))**2/(g_ell_width/2.)**2) - ((yct/np.sqrt(1/max_probability))**2/(g_ell_height/2.)**2) + max_probability)
+    return max(0, - ((xct/np.sqrt(4/(max_probability-min_probability)))**2/(g_ell_width/2.)**2) - ((yct/np.sqrt(4/(max_probability-min_probability)))**2/(g_ell_height/2.)**2) + max_probability)
 
 class RetentionProbabilityWithLinearFunction():
   def __call__(self, particle):
 
     max_probability = particle.experiment.max_retention_probability
+    min_probability = particle.experiment.min_retention_probability
 
     if particle is not None:
       x = particle.position_at(-1)[0]
@@ -108,4 +110,4 @@ class RetentionProbabilityWithLinearFunction():
     xct = xc * cos_angle - yc * sin_angle
     yct = xc * sin_angle + yc * cos_angle 
 
-    return max(0 , - np.sqrt(((xct**2/(g_ell_width/2.)**2) + (yct**2/(g_ell_height/2.)**2))  * ((g_ell_height/2)**2)) + max_probability)
+    return max(0 , - np.sqrt((((xct/(2/(max_probability-min_probability)))**2/(g_ell_width/2.)**2) + ((yct/(2/(max_probability-min_probability)))**2/(g_ell_height/2.)**2))) + max_probability)

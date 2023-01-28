@@ -29,13 +29,13 @@ class Experiment():
                no_cluster_molecules_diffusion_coefficient_range,
                residence_time_range,
                retention_probabilities_functions_for_each_cluster,
+               retention_probabilities,
                lifetime_range,
                lifetime_skewness,
                lifetime_mean,
                lifetime_std,
                eccentricity_maximum,
                minimum_level_of_percentage_molecules,
-               max_retention_probability,
                average_molecules_per_frame,
                frame_rate,
                plots_with_blinking = False,
@@ -44,7 +44,8 @@ class Experiment():
 
     self.height = height
     self.width = width
-    self.max_retention_probability = max_retention_probability
+    self.max_retention_probability = max(retention_probabilities)
+    self.min_retention_probability = min(retention_probabilities)
     self.frame_rate = frame_rate
     self.average_molecules_per_frame = average_molecules_per_frame
     self.cluster_centroids_diffusion_coefficient_range = cluster_centroids_diffusion_coefficient_range

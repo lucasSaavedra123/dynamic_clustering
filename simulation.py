@@ -18,30 +18,30 @@ an_experiment = Experiment(
     [1e-5, 0.7], #no_cluster_molecules_diffusion_coefficient_range
     [0.358, 0.025],
     [RetentionProbabilityWithDiscreteFunction, RetentionProbabilityWithCuadraticFunction, RetentionProbabilityWithLinearFunction],
+    [0.01, 0.5],
     [25, 7000],
     3,
     500,
     2000,
     0.7,
-    0.85,
-    0.5,
+    0.60,
     3.6,
     10e-3, #frame_rate
     plots_with_blinking = False,
     save_memory = True
 )
 
-an_experiment.plot(show=False)
-plt.savefig(f"./images/{str(0).zfill(5)}.jpg", dpi=200)
-plt.clf()
+#an_experiment.plot(show=False)
+#plt.savefig(f"./images/{str(0).zfill(5)}.jpg", dpi=200)
+#plt.clf()
 
 for i in range(1, 1000):
     print("Step:", i)
     an_experiment.move()
-    print(an_experiment.percentage_of_clustered_molecules)
-    print("Ploting...", i)
-    an_experiment.plot(show=False)
-    plt.savefig(f"./images/{str(i).zfill(5)}.jpg", dpi=200)
-    plt.clf()
+    #print(an_experiment.percentage_of_clustered_molecules)
+    #print("Ploting...", i)
+    #an_experiment.plot(show=False)
+    #plt.savefig(f"./images/{str(i).zfill(5)}.jpg", dpi=200)
+    #plt.clf()
 
 #an_experiment.build_smlm_dataset_as_dataframe().to_csv("smlm_dataset.csv", index=False)
