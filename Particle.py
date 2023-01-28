@@ -62,6 +62,7 @@ class Particle():
         
         if self.can_be_retained and self.cluster is not None and not self.going_out_from_cluster:
           p = self.cluster.probability_to_be_retained(self)
+          self.cluster.probabilities_emitted.append([new_x, new_y, p])
           self.locked = np.random.choice([True, False], 1, p=[p, 1-p])[0]
 
       else:

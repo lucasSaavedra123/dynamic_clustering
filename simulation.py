@@ -31,14 +31,17 @@ an_experiment = Experiment(
     save_memory = True
 )
 
+an_experiment.plot(show=False)
+plt.savefig(f"./images/{str(0).zfill(5)}.jpg", dpi=200)
+plt.clf()
 
-for i in range(1, 7000):
+for i in range(1, 1000):
     print("Step:", i)
     an_experiment.move()
-    #print(an_experiment.percentage_of_clustered_molecules)
-    #print("Ploting...", i)
-    #an_experiment.plot(show=False)
-    #plt.savefig(f"./images/{str(i).zfill(5)}.jpg", dpi=200)
-    #plt.clf()
+    print(an_experiment.percentage_of_clustered_molecules)
+    print("Ploting...", i)
+    an_experiment.plot(show=False)
+    plt.savefig(f"./images/{str(i).zfill(5)}.jpg", dpi=200)
+    plt.clf()
 
-an_experiment.build_smlm_dataset_as_dataframe().to_csv("smlm_dataset.csv", index=False)
+#an_experiment.build_smlm_dataset_as_dataframe().to_csv("smlm_dataset.csv", index=False)

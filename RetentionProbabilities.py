@@ -3,72 +3,60 @@ import numpy as np
 class Region():
   def __init__(self, cluster):
     self.cluster = cluster
-    self.min_radio = self.minimum_assign_radio()
-    self.max_radio = self.maximum_assign_radio()
-  
-  def inside_region(self, radio):
-    return self.min_radio < radio < self.max_radio
+    self.height = self.assign_height()
+    self.width = self.assign_width()
+    self.angle = cluster.angle
 
-class OuterRegion(Region):
-  def maximum_assign_radio(self):
-    return self.cluster.radio + self.cluster.radio * 0.15
+  def inside_region(self, particle):
+    x = particle.position_at(-1)[0]
+    y = particle.position_at(-1)[1]
 
-  def minimum_assign_radio(self):
-    return self.cluster.radio
+    g_ell_center = particle.cluster.position_at(-1)
+    g_ell_width = self.width
+    g_ell_height = self.height
+    angle = self.angle
 
-  @property
-  def probability_to_be_retained(self):
-    return 0
+    cos_angle = np.cos(angle)
+    sin_angle = np.sin(angle)
+
+    xc = x - g_ell_center[0]
+    yc = y - g_ell_center[1]
+
+    xct = xc * cos_angle - yc * sin_angle
+    yct = xc * sin_angle + yc * cos_angle 
+
+    return (xct**2/(g_ell_width/2.)**2) + (yct**2/(g_ell_height/2.)**2) <= 1
+
 
 class InnerRegion(Region):
-  def maximum_assign_radio(self):
-    return self.cluster.radio
+  def assign_height(self):
+    return self.cluster.height - self.cluster.height * 0.10
 
-  def minimum_assign_radio(self):
-    return self.cluster.radio - self.cluster.radio * 0.15
-
-  @property
-  def probability_to_be_retained(self):
-    return 0.05
+  def assign_width(self):
+    return self.cluster.width - self.cluster.width * 0.10
 
 class MiddleRegion(Region):
-  def maximum_assign_radio(self):
-    return self.cluster.inner_region.min_radio
+  def assign_height(self):
+    return self.cluster.height - self.cluster.height * 0.80
 
-  def minimum_assign_radio(self):
-    return self.cluster.center_region.max_radio
-
-  @property
-  def probability_to_be_retained(self):
-    return 0.1
-
-class CenterRegion(Region):
-  def maximum_assign_radio(self):
-    return np.random.uniform(self.cluster.radio * 0.05, self.cluster.radio * 0.2)
-
-  def minimum_assign_radio(self):
-    return 0
-
-  @property
-  def probability_to_be_retained(self):
-    return 0.5
+  def assign_width(self):
+    return self.cluster.width - self.cluster.width * 0.80
 
 class RetentionProbabilityWithDiscreteFunction():
   def __call__(self, particle):
-    """
-    if self.cluster.outer_region.inside_region(radio):
-      return self.cluster.outer_region.probability_to_be_retained
-    elif self.cluster.inner_region.inside_region(radio):
-      return self.cluster.inner_region.probability_to_be_retained
-    elif self.cluster.middle_region.inside_region(radio):
-      return self.cluster.middle_region.probability_to_be_retained
-    elif self.cluster.center_region.inside_region(radio):
-      return self.cluster.center_region.probability_to_be_retained
-    else:
-      return 0
-    """
 
-    return 0
+    self.build_regions(particle)
+
+    if particle.cluster.inner_region.inside_region(particle) and particle.cluster.middle_region.inside_region(particle):
+      return 0.5
+    elif particle.cluster.inner_region.inside_region(particle):
+      return 0.1
+    else:
+      return 0.01
+
+  def build_regions(self, particle):
+    particle.cluster.inner_region = InnerRegion(particle.cluster)
+    particle.cluster.middle_region = MiddleRegion(particle.cluster)
 
 class RetentionProbabilityWithCuadraticFunction():
 
@@ -108,7 +96,7 @@ class RetentionProbabilityWithLinearFunction():
     # The ellipse
     g_ell_center = particle.cluster.position_at(-1)
     g_ell_width = particle.cluster.width
-    g_ell_height =particle.cluster.height
+    g_ell_height = particle.cluster.height
     angle = particle.cluster.angle
 
     cos_angle = np.cos(angle)
@@ -120,4 +108,4 @@ class RetentionProbabilityWithLinearFunction():
     xct = xc * cos_angle - yc * sin_angle
     yct = xc * sin_angle + yc * cos_angle 
 
-    return max(0 , np.sqrt((xct**2/(g_ell_width/2.)**2) + (yct**2/(g_ell_height/2.)**2)  * ((g_ell_height/2)**2)) + max_probability)
+    return max(0 , - np.sqrt(((xct**2/(g_ell_width/2.)**2) + (yct**2/(g_ell_height/2.)**2))  * ((g_ell_height/2)**2)) + max_probability)

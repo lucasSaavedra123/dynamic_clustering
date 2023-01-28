@@ -71,6 +71,8 @@ class Cluster():
     self.eccentricity_maximum = eccentricity_maximum
     self.retention_probability_function = retention_probability_function() # We create an instance of it
 
+    self.probabilities_emitted = []
+
     bad_initial_shape = True
 
     self.angle = np.random.uniform(0, 2*np.pi)
@@ -161,6 +163,7 @@ class Cluster():
     return self.positions[t, :]
 
   def change_cluster_shape(self):
+    """
     valid_new_shape = False
 
     while not valid_new_shape:
@@ -176,3 +179,5 @@ class Cluster():
     self.width = max(new_width, max(self.experiment.radio_range))
     self.height = max(new_height, max(self.experiment.radio_range))
     self.angle = new_angle
+    """
+    pass
