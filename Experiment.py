@@ -86,7 +86,8 @@ class Experiment():
           np.random.choice(retention_probabilities_functions_for_each_cluster, 1)[0],
           lifetime,
           eccentricity_maximum,
-          self
+          self,
+          initial_particles=[]
         )
       )
 
@@ -105,6 +106,7 @@ class Experiment():
 
     self.update_percentage_of_clustered_molecules()
     self.recharge_batteries()
+    self.scan_for_overlapping_clusters()
     self.update_smlm_dataset()
 
   def plot(self, t=None, show=False):
@@ -263,6 +265,29 @@ class Experiment():
     all_particles += self.particles_without_cluster
 
     return all_particles
+
+  def scan_for_overlapping_clusters(self):
+    for cluster in self.clusters:
+      for other_cluster in self.clusters:
+        if cluster != other_cluster:
+          if cluster.is_overlapping(other_cluster):
+            cluster.move_towards_to(other_cluster)
+
+  def scan_for_merging_clusters(self):
+    
+    cluster_index = 0
+    
+    while cluster_index < len(self.clusters):
+      for other_cluster in self.clusters:
+        if self.clusters[cluster_index] != other_cluster:
+          if self.clusters[cluster_index].is_overlapping(other_cluster) and self.cluster[cluster_index].can_merge_with(other_cluster):
+            self.clusters.append(Cluster.merge_clusters(self.clusters[cluster_index], other_cluster))
+            self.clusters.remove(other_cluster)
+            self.clusters.remove(self.clusters[cluster_index])
+            cluster_index = 0
+            break
+
+      cluster_index += 1
 
   @property
   def current_time(self):
