@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 
 from Particle import Particle
@@ -5,6 +7,8 @@ from Particle import Particle
 from hypo import Hypoexponential
 
 class Cluster():
+  id_obj = itertools.count(1)
+
   """
   def is_inside(self, particle):
     return np.linalg.norm(self.position_at(-1) - particle.position_at(-1)) < self.radio
@@ -91,6 +95,7 @@ class Cluster():
     self.number_of_particles_going_out = 0
     self.eccentricity_maximum = eccentricity_maximum
     self.retention_probability_function = retention_probability_function() # We create an instance of it
+    self.id = next(Cluster.id_obj)
 
     bad_initial_shape = True
 
@@ -162,7 +167,7 @@ class Cluster():
     new_y = self.position_at(-1)[1] + np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1)
 
     if self.cluster_moving_to is not None:
-      while self.cluster_moving_to.distance_to_radio_from(np.array(new_x, new_y)) > self.cluster_moving_to.distance_to_radio_from(np.array(self.position_at(-1)[0], np.array(self.position_at(-1)[1]))):
+      while self.cluster_moving_to.distance_to_radio_from(np.array(new_x, new_y)) > self.cluster_moving_to.distance_to_radio_from(self.position_at(-1)[0], self.position_at(-1)[1]):
         new_x = self.position_at(-1)[0] + np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1)
         new_y = self.position_at(-1)[1] + np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1)
 

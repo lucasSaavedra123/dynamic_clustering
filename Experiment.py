@@ -247,7 +247,8 @@ class Experiment():
           'y': particle.position_at(-1)[1],
           't': self.time * self.frame_rate,
           'frame': self.time,
-          'clusterized': int(particle.cluster != None)
+          'clusterized': int(particle.cluster != None),
+          'cluster': particle.cluster.id if particle.cluster != None else 0,
         })
 
   def build_smlm_dataset_as_dataframe(self):
