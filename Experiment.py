@@ -38,6 +38,7 @@ class Experiment():
                minimum_level_of_percentage_molecules,
                average_molecules_per_frame,
                frame_rate,
+               maximum_frame,
                plots_with_blinking = False,
                save_memory = True #It is not efficient to hold whole temporal information of the experiment.
                ):
@@ -57,6 +58,8 @@ class Experiment():
     self.save_memory = save_memory
     self.residence_time_range = residence_time_range
     self.number_of_particles_per_cluster_range = number_of_particles_per_cluster_range
+
+    self.maximum_frame = maximum_frame
 
     self.eccentricity_maximum = eccentricity_maximum
 
@@ -153,6 +156,7 @@ class Experiment():
       plt.show()
 
   def move(self):
+    assert self.time != self.maximum_frame, "The simulation has already finished (the limit is maximum_frames parameter)"
     particles_that_dont_belong_no_more_to_cluster = []
     clusters_to_remove = []
 
