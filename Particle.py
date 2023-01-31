@@ -1,7 +1,9 @@
 import numpy as np
 from stochastic.processes.noise import FractionalGaussianNoise as FGN
-
+import pickle
 from functools import lru_cache
+from os.path import exists
+import itertools
 
 def fgn_autocovariance(hurst, n):
     """Autocovariance function for fGn."""
@@ -11,9 +13,11 @@ def fgn_autocovariance(hurst, n):
 autocovariance = lru_cache(1)(fgn_autocovariance)
 
 class Particle():
+  id_obj = itertools.count(1)
   def __init__(self, initial_position, diffusion_coefficient, experiment, can_be_retained=False, cluster = None, residence_time = None):
     #Particle state values
     self.positions = np.array([initial_position])
+    self.id = next(Particle.id_obj)
     self.can_be_retained = can_be_retained
     self.cluster = cluster
     self.diffusion_coefficient = diffusion_coefficient
@@ -29,7 +33,7 @@ class Particle():
     self.gn_memory_x = None
     self.gn_memory_y = None
 
-    self.anomalous_exponent = np.random.uniform(0.1,1.9)
+    self.anomalous_exponent = np.random.uniform(0,2)
 
   def position_at(self, t):
     return self.positions[t, :]
@@ -50,8 +54,9 @@ class Particle():
       if self.cluster is not None:
         #El cluster ya se movio!
         original_cluster_direction_movement = self.cluster.position_at(-1) - self.cluster.position_at(-2)
-        new_x = self.generate_displacement('x') + self.position_at(-1)[0] + original_cluster_direction_movement[0]
-        new_y = self.generate_displacement('y') + self.position_at(-1)[1] + original_cluster_direction_movement[1]
+        #original_cluster_direction_movement = np.array([0,0])
+        new_x = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[0] + original_cluster_direction_movement[0]
+        new_y = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[1] + original_cluster_direction_movement[1]
 
         old_radio_from_center = np.linalg.norm(np.array([self.position_at(-1)[0], self.position_at(-1)[1]]) - self.cluster.position_at(-2))
         new_radio_from_center = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
@@ -61,8 +66,8 @@ class Particle():
 
         if self.going_out_from_cluster:
           while new_radio_from_center < old_radio_from_center:
-            new_x = self.generate_displacement('x') + self.position_at(-1)[0] + original_cluster_direction_movement[0]
-            new_y = self.generate_displacement('y') + self.position_at(-1)[1] + original_cluster_direction_movement[1]
+            new_x = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[0] + original_cluster_direction_movement[0]
+            new_y = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[1] + original_cluster_direction_movement[1]
             new_radio_from_center = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
 
           if not self.cluster.is_inside(position=np.array([new_x, new_y])):
@@ -72,9 +77,12 @@ class Particle():
 
         else:
           while not self.cluster.is_inside(position=np.array([new_x, new_y])):
-            new_x = self.generate_displacement('x') + self.position_at(-1)[0] + original_cluster_direction_movement[0]
-            new_y = self.generate_displacement('y') + self.position_at(-1)[1] + original_cluster_direction_movement[1]
-        
+            new_x = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[0] + original_cluster_direction_movement[0]
+            new_y = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[1] + original_cluster_direction_movement[1]
+
+          #if not self.cluster.is_inside(position=np.array([new_x, new_y])):
+          #  self.cluster = None
+
         if self.can_be_retained and self.cluster is not None and not self.going_out_from_cluster:
           p = self.cluster.probability_to_be_retained(self)
           self.locked = np.random.choice([True, False], 1, p=[p, 1-p])[0]
@@ -138,15 +146,19 @@ class Particle():
         fgn = np.zeros(self.experiment.maximum_frame)
         phi = np.zeros(self.experiment.maximum_frame)
         psi = np.zeros(self.experiment.maximum_frame)
-        cov = autocovariance(hurst, self.experiment.maximum_frame)
 
-        # First increment from stationary distribution
-        fgn[0] = gn[0]
-        v = 1
-        phi[0] = 0
+        if not exists(f'./cache/cov_{self.id}'):
+          with open(f'./cache/cov_{self.id}', 'wb') as file:
+            pickle.dump(autocovariance(hurst, self.experiment.maximum_frame), file)
 
-        # Generates fgn realization with n increments of size 1
-        for i in range(1, self.experiment.maximum_frame):
+        with open(f'./cache/cov_{self.id}', 'rb') as f:
+            cov = pickle.load(f)
+
+        if not exists(f'./cache/v_memory_{self.id}'):
+          v_memory = {}
+          phi_memory = {}
+          v = 1
+          for i in range(1, self.experiment.maximum_frame):
             phi[i - 1] = cov[i]
             for j in range(i - 1):
                 psi[j] = phi[j]
@@ -154,13 +166,38 @@ class Particle():
             phi[i - 1] /= v
             for j in range(i - 1):
                 phi[j] = psi[j] - phi[i - 1] * psi[i - j - 2]
-            v *= 1 - phi[i - 1] * phi[i - 1]
-            for j in range(i):
-                fgn[i] += phi[j] * fgn[i - j - 1]
-            fgn[i] += np.sqrt(v) * gn[i]
+            
+            phi_memory[i] = phi.copy()
 
-            if i == self.experiment.time:
-              break
+            v *= 1 - phi_memory[i][i - 1] * phi_memory[i][i - 1]
+            v_memory[i] = v
+
+            with open(f'./cache/v_memory_{self.id}', 'wb') as file:
+              pickle.dump(v_memory, file)
+
+            with open(f'./cache/phi_memory_{self.id}', 'wb') as file:
+              pickle.dump(phi_memory, file)
+       
+        with open(f'./cache/phi_memory_{self.id}', 'rb') as f:
+            phi_memory = pickle.load(f)
+
+        with open(f'./cache/v_memory_{self.id}', 'rb') as f:
+            v_memory = pickle.load(f)
+
+        # First increment from stationary distribution
+        fgn[0] = gn[0]
+        v = 1
+        phi[0] = 0
+
+        if self.experiment.time != 0:
+          # Generates fgn realization with n increments of size 1
+          for i in range(1, self.experiment.maximum_frame):              
+              for j in range(i):
+                  fgn[i] += phi_memory[i][j] * fgn[i - j - 1]
+              fgn[i] += np.sqrt(v_memory[i]) * gn[i]
+
+              if i == self.experiment.time:
+                break
 
     # Scale to interval [0, T]
     fgn *= scale

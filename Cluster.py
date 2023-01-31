@@ -178,6 +178,15 @@ class Cluster():
         new_y
       ]], axis=0)
 
+    """
+    while not all([self.is_inside(particle) for particle in self.particles]):
+      new_x = self.position_at(-2)[0] + np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1)
+      new_y = self.position_at(-2)[1] + np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1)
+
+      self.positions[-1, 0] = new_x
+      self.positions[-1, 1] = new_y
+    """
+
     self.change_cluster_shape()
 
     for particle in self.particles:
