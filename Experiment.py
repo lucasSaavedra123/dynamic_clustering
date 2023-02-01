@@ -68,7 +68,7 @@ class Experiment():
     self.lifetime_skewness = lifetime_skewness
     self.lifetime_mean = lifetime_mean
 
-    assert 0 < minimum_level_of_percentage_molecules < 1
+    assert 0 <= minimum_level_of_percentage_molecules <= 1
     self.minimum_level_of_percentage_molecules = minimum_level_of_percentage_molecules
     self.percentage_of_clustered_molecules = None
     self.clustered_molecules = None

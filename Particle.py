@@ -53,10 +53,10 @@ class Particle():
     else:
       if self.cluster is not None:
         #El cluster ya se movio!
-        original_cluster_direction_movement = self.cluster.position_at(-1) - self.cluster.position_at(-2)
-        #original_cluster_direction_movement = np.array([0,0])
-        new_x = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[0] + original_cluster_direction_movement[0]
-        new_y = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[1] + original_cluster_direction_movement[1]
+        #original_cluster_direction_movement = self.cluster.position_at(-1) - self.cluster.position_at(-2)
+        original_cluster_direction_movement = np.array([0,0])
+        new_x = self.generate_displacement('x') + self.position_at(-1)[0] + original_cluster_direction_movement[0]
+        new_y = self.generate_displacement('y') + self.position_at(-1)[1] + original_cluster_direction_movement[1]
 
         old_radio_from_center = np.linalg.norm(np.array([self.position_at(-1)[0], self.position_at(-1)[1]]) - self.cluster.position_at(-2))
         new_radio_from_center = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
@@ -66,8 +66,8 @@ class Particle():
 
         if self.going_out_from_cluster:
           while new_radio_from_center < old_radio_from_center:
-            new_x = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[0] + original_cluster_direction_movement[0]
-            new_y = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[1] + original_cluster_direction_movement[1]
+            new_x = self.generate_displacement('x') + self.position_at(-1)[0] + original_cluster_direction_movement[0]
+            new_y = self.generate_displacement('y') + self.position_at(-1)[1] + original_cluster_direction_movement[1]
             new_radio_from_center = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
 
           if not self.cluster.is_inside(position=np.array([new_x, new_y])):
@@ -76,12 +76,29 @@ class Particle():
             self.diffusion_coefficient = np.random.uniform(self.experiment.no_cluster_molecules_diffusion_coefficient_range[0], self.experiment.no_cluster_molecules_diffusion_coefficient_range[1])
 
         else:
-          while not self.cluster.is_inside(position=np.array([new_x, new_y])):
-            new_x = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[0] + original_cluster_direction_movement[0]
-            new_y = np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1) + self.position_at(-1)[1] + original_cluster_direction_movement[1]
+          retry = True
+          while retry:
+            displacement_x = self.generate_displacement('x')
+            displacement_y = self.generate_displacement('y')
 
-          #if not self.cluster.is_inside(position=np.array([new_x, new_y])):
-          #  self.cluster = None
+            new_x = displacement_x + self.position_at(-1)[0] + original_cluster_direction_movement[0]
+            new_y = displacement_y + self.position_at(-1)[1] + original_cluster_direction_movement[1]
+
+            if not self.cluster.is_inside(position=np.array([new_x, new_y])):
+              new_x = -displacement_x + self.position_at(-1)[0] + original_cluster_direction_movement[0]
+              new_y = displacement_y + self.position_at(-1)[1] + original_cluster_direction_movement[1]
+              if not self.cluster.is_inside(position=np.array([new_x, new_y])):
+                new_x = displacement_x + self.position_at(-1)[0] + original_cluster_direction_movement[0]
+                new_y = -displacement_y + self.position_at(-1)[1] + original_cluster_direction_movement[1]
+                if not self.cluster.is_inside(position=np.array([new_x, new_y])):
+                  new_x = -displacement_x + self.position_at(-1)[0] + original_cluster_direction_movement[0]
+                  new_y = -displacement_y + self.position_at(-1)[1] + original_cluster_direction_movement[1]
+                else:
+                  retry = False
+              else:
+                retry = False
+            else:
+              retry = False
 
         if self.can_be_retained and self.cluster is not None and not self.going_out_from_cluster:
           p = self.cluster.probability_to_be_retained(self)
