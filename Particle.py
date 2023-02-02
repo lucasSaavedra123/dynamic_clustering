@@ -53,6 +53,8 @@ class Particle():
     else:
       if self.cluster is not None:
         #El cluster ya se movio!
+        #cluster_displacement = self.cluster.position_at(-1) - self.cluster.position_at(-2)
+        cluster_displacement = np.array([0,0])
 
         if not self.going_out_from_cluster and (self.cluster.lifetime == 0 or self.experiment.current_time - self.time_belonging_cluster >= self.residence_time):
           self.going_out_from_cluster = True
@@ -63,25 +65,25 @@ class Particle():
             displacement_x = self.generate_displacement('x')
             displacement_y = self.generate_displacement('y')
 
-            new_x = displacement_x + self.position_at(-1)[0]
-            new_y = displacement_y + self.position_at(-1)[1]
+            new_x = displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
+            new_y = displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
 
             new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
-            old_radio = self.cluster.distance_to_radio_from(np.array([self.position_at(-1)[0], self.position_at(-1)[1]]))
+            old_radio = self.cluster.distance_to_radio_from(self.position_at(-1))
 
             if new_radio < old_radio:
-              new_x = -displacement_x + self.position_at(-1)[0]
-              new_y = displacement_y + self.position_at(-1)[1]
+              new_x = -displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
+              new_y = displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
               new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
               if new_radio < old_radio:
-                new_x = displacement_x + self.position_at(-1)[0]
-                new_y = -displacement_y + self.position_at(-1)[1]
+                new_x = displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
+                new_y = -displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
                 new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
                 if new_radio < old_radio:
-                  new_x = -displacement_x + self.position_at(-1)[0]
-                  new_y = -displacement_y + self.position_at(-1)[1]
+                  new_x = -displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
+                  new_y = -displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
                   new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
-                  if new_radio < old_radio:
+                  if new_radio >= old_radio:
                     retry = False
                 else:
                   retry = False
@@ -99,30 +101,61 @@ class Particle():
         else:
           retry = True
           while retry:
+            if self.cluster.is_inside(position=self.position_at(-1)):
+              displacement_x = self.generate_displacement('x') + cluster_displacement[0]
+              displacement_y = self.generate_displacement('y') + cluster_displacement[1]
 
-            displacement_x = self.generate_displacement('x')
-            displacement_y = self.generate_displacement('y')
+              new_x = displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
+              new_y = displacement_y + self.position_at(-1)[0] + cluster_displacement[1]
 
-            new_x = displacement_x + self.position_at(-1)[0]
-            new_y = displacement_y + self.position_at(-1)[1]
-
-            if not self.cluster.is_inside(position=np.array([new_x, new_y])):
-              new_x = -displacement_x + self.position_at(-1)[0]
-              new_y = displacement_y + self.position_at(-1)[1]
               if not self.cluster.is_inside(position=np.array([new_x, new_y])):
-                new_x = displacement_x + self.position_at(-1)[0]
-                new_y = -displacement_y + self.position_at(-1)[1]
+                new_x = -displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
+                new_y = displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
                 if not self.cluster.is_inside(position=np.array([new_x, new_y])):
-                  new_x = -displacement_x + self.position_at(-1)[0]
-                  new_y = -displacement_y + self.position_at(-1)[1]
-                  if self.cluster.is_inside(position=np.array([new_x, new_y])):
+                  new_x = displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
+                  new_y = -displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
+                  if not self.cluster.is_inside(position=np.array([new_x, new_y])):
+                    new_x = -displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
+                    new_y = -displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
+                    if self.cluster.is_inside(position=np.array([new_x, new_y])):
+                      retry = False
+                  else:
                     retry = False
                 else:
                   retry = False
               else:
                 retry = False
             else:
-              retry = False
+              while retry:
+                displacement_x = self.generate_displacement('x')
+                displacement_y = self.generate_displacement('y')
+
+                new_x = displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
+                new_y = displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
+
+                new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
+                old_radio = self.cluster.distance_to_radio_from(self.position_at(-1))
+
+                if new_radio > old_radio:
+                  new_x = -displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
+                  new_y = displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
+                  new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
+                  if new_radio > old_radio:
+                    new_x = displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
+                    new_y = -displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
+                    new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
+                    if new_radio > old_radio:
+                      new_x = -displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
+                      new_y = -displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
+                      new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
+                      if new_radio <= old_radio:
+                        retry = False
+                    else:
+                      retry = False
+                  else:
+                    retry = False
+                else:
+                  retry = False
 
         if self.can_be_retained and self.cluster is not None and not self.going_out_from_cluster:
           p = self.cluster.probability_to_be_retained(self)

@@ -167,9 +167,12 @@ class Cluster():
     new_y = self.position_at(-1)[1] + np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1)
 
     if self.cluster_moving_to is not None:
-      while self.cluster_moving_to.distance_to_radio_from(np.array([new_x, new_y])) > self.cluster_moving_to.distance_to_radio_from(self.position_at(-1)):
-        new_x = self.position_at(-1)[0] + np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1)
-        new_y = self.position_at(-1)[1] + np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1)
+      direction_to_another_cluster = self.cluster_moving_to.position_at(-1) - self.position_at(-1)
+      direction_to_another_cluster = direction_to_another_cluster / np.linalg.norm(direction_to_another_cluster)
+      new_x = direction_to_another_cluster[0] * np.abs(np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1))
+      new_y = direction_to_another_cluster[1] * np.abs(np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1))
+
+      assert self.cluster_moving_to.distance_to_radio_from(np.array([new_x, new_y])) <= self.cluster_moving_to.distance_to_radio_from(self.position_at(-1))
 
     self.positions = np.append(
       self.positions,
@@ -178,12 +181,14 @@ class Cluster():
         new_y
       ]], axis=0)
 
+    """
     while not all([self.is_inside(particle) for particle in self.particles]):
       new_x = self.position_at(-2)[0] + np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1)
       new_y = self.position_at(-2)[1] + np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1)
 
       self.positions[-1, 0] = new_x
       self.positions[-1, 1] = new_y
+    """
 
     self.change_cluster_shape()
 
