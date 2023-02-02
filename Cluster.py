@@ -237,11 +237,18 @@ class Cluster():
     return ((self_particles_that_are_in_another_cluster+another_particles_that_are_in_self)/(particle_of_self+particle_of_another_cluster))
 
   def is_overlapping(self, another_cluster):
-    return self.measure_overlap_with(another_cluster) > 0.25
+    return self.measure_overlap_with(another_cluster) > 0.1
 
   def move_towards_to(self, another_cluster):
     self.cluster_moving_to = another_cluster
     another_cluster.cluster_moving_to = self
 
   def can_merge_with(self, another_cluster):
-    return self.measure_overlap_with(another_cluster) == 1
+    return self.is_inside_of_cluster(another_cluster) or another_cluster.is_inside_of_cluster(self)
+
+  def is_inside_of_cluster(self, another_cluster):
+    self_particles_that_are_in_another_cluster = len([particle for particle in self.particles if another_cluster.is_inside(particle=particle)])
+
+    particle_of_self = len(self.particles)
+
+    return self_particles_that_are_in_another_cluster/particle_of_self == 1
