@@ -30,6 +30,10 @@ class Particle():
     self.time_belonging_cluster = experiment.current_time #This only has sense in particle belongs to a cluster
     self.residence_time = residence_time #This only has sense in particle belongs to a cluster
 
+    self.was_inside = None #Neccesary when clusters are merged
+
+    self.direction = 1
+
     self.gn_memory_x = None
     self.gn_memory_y = None
 
@@ -38,137 +42,117 @@ class Particle():
   def position_at(self, t):
     return self.positions[t, :]
 
+  def _move_closer(self):
+    old_radio = self.cluster.distance_to_radio_from(self.position_at(-1))
+    retry = True
+    while retry:
+      displacement_x = self.generate_displacement('x')
+      displacement_y = self.generate_displacement('y')
+
+      self.new_x = self.direction * displacement_x + self.position_at(-1)[0]
+      self.new_y = self.direction * displacement_y + self.position_at(-1)[1]
+      new_radio = self.cluster.distance_to_radio_from(np.array([self.new_x, self.new_y]))
+
+      if new_radio > old_radio:
+        self.direction = -self.direction
+        self.new_x = self.direction * displacement_x + self.position_at(-1)[0]
+        self.new_y = self.direction * displacement_y + self.position_at(-1)[1]
+        new_radio = self.cluster.distance_to_radio_from(np.array([self.new_x, self.new_y]))
+        if not (new_radio > old_radio):
+          retry = False
+      else:
+        retry = False
+
+  def _move_further(self):
+    old_radio = self.cluster.distance_to_radio_from(self.position_at(-1))
+    retry = True
+    while retry:
+      displacement_x = self.generate_displacement('x')
+      displacement_y = self.generate_displacement('y')
+
+      self.new_x = self.direction * displacement_x + self.position_at(-1)[0]
+      self.new_y = self.direction * displacement_y + self.position_at(-1)[1]
+
+      new_radio = self.cluster.distance_to_radio_from(np.array([self.new_x, self.new_y]))
+
+      if new_radio < old_radio:
+        self.direction = -self.direction
+        self.new_x = self.direction * displacement_x + self.position_at(-1)[0]
+        self.new_y = self.direction * displacement_y + self.position_at(-1)[1]
+        new_radio = self.cluster.distance_to_radio_from(np.array([self.new_x, self.new_y]))
+        if not (new_radio < old_radio):
+          retry = False
+      else:
+        retry = False
+
+  def _move_inside_cluster(self):
+    retry = True
+    while retry:
+      displacement_x = self.generate_displacement('x')
+      displacement_y = self.generate_displacement('y')
+
+      self.new_x = self.direction * displacement_x + self.position_at(-1)[0]
+      self.new_y = self.direction * displacement_y + self.position_at(-1)[1]
+
+      if not self.cluster.is_inside(position=np.array([self.new_x, self.new_y])):
+        self.direction = -self.direction
+        self.new_x = self.direction * displacement_x + self.position_at(-1)[0]
+        self.new_y = self.direction * displacement_y + self.position_at(-1)[1]
+        if self.cluster.is_inside(position=np.array([self.new_x, self.new_y])):
+          retry = False
+      else:
+        retry = False
+  
+  def _move_as_locked(self):
+    self.positions = np.append(self.positions, [[self.position_at(-1)[0], self.position_at(-1)[1]]], axis=0)
+
+    if self.cluster is not None:
+      if not self.cluster.is_inside(self):
+        self.cluster = None
+
+        if np.random.choice([False, True], 1, p=[0.50, 0.50])[0]:
+          self.locked = False
+          self.diffusion_coefficient = np.random.uniform(self.experiment.no_cluster_molecules_diffusion_coefficient_range[0], self.experiment.no_cluster_molecules_diffusion_coefficient_range[1])
+
+  def _move_as_free(self):
+    self.new_x = self.generate_displacement('x') + self.position_at(-1)[0]
+    self.new_y = self.generate_displacement('y') + self.position_at(-1)[1]
+
+  def _move_as_clustered(self):
+    #cluster_displacement = self.cluster.position_at(-1) - self.cluster.position_at(-2)
+    if not self.going_out_from_cluster and (self.cluster.lifetime == 0 or self.experiment.current_time - self.time_belonging_cluster >= self.residence_time):
+      self.going_out_from_cluster = True
+
+    if self.going_out_from_cluster:
+      self._move_further()
+
+      if not self.cluster.is_inside(position=np.array([self.new_x, self.new_y])):
+        self.going_out_from_cluster = False
+        self.cluster = None
+        self.diffusion_coefficient = np.random.uniform(self.experiment.no_cluster_molecules_diffusion_coefficient_range[0], self.experiment.no_cluster_molecules_diffusion_coefficient_range[1])
+    else:
+      if self.cluster.is_inside(position=self.position_at(-1)):
+        self._move_inside_cluster()
+      else:
+        self._move_closer()
+
+    if self.cluster is not None and self.can_be_retained and not self.going_out_from_cluster:
+      p = self.cluster.probability_to_be_retained(self)
+      self.locked = np.random.choice([True, False], 1, p=[p, 1-p])[0]
+
   def move(self):
     if self.locked:
-      self.positions = np.append(self.positions, [[self.position_at(-1)[0], self.position_at(-1)[1]]], axis=0)
-
-      if self.cluster is not None:
-        if not self.cluster.is_inside(self):
-          self.cluster = None
-
-          if np.random.choice([False, True], 1, p=[0.50, 0.50])[0]:
-            self.locked = False
-            self.diffusion_coefficient = np.random.uniform(self.experiment.no_cluster_molecules_diffusion_coefficient_range[0], self.experiment.no_cluster_molecules_diffusion_coefficient_range[1])
-
+      self._move_as_locked()
     else:
       if self.cluster is not None:
-        #El cluster ya se movio!
-        #cluster_displacement = self.cluster.position_at(-1) - self.cluster.position_at(-2)
-        cluster_displacement = np.array([0,0])
-
-        if not self.going_out_from_cluster and (self.cluster.lifetime == 0 or self.experiment.current_time - self.time_belonging_cluster >= self.residence_time):
-          self.going_out_from_cluster = True
-
-        if self.going_out_from_cluster:
-          retry = True
-          while retry:
-            displacement_x = self.generate_displacement('x')
-            displacement_y = self.generate_displacement('y')
-
-            new_x = displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
-            new_y = displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
-
-            new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
-            old_radio = self.cluster.distance_to_radio_from(self.position_at(-1))
-
-            if new_radio < old_radio:
-              new_x = -displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
-              new_y = displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
-              new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
-              if new_radio < old_radio:
-                new_x = displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
-                new_y = -displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
-                new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
-                if new_radio < old_radio:
-                  new_x = -displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
-                  new_y = -displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
-                  new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
-                  if new_radio >= old_radio:
-                    retry = False
-                else:
-                  retry = False
-              else:
-                retry = False
-            else:
-              retry = False
-
-          if not self.cluster.is_inside(position=np.array([new_x, new_y])):
-            self.going_out_from_cluster = False
-            self.cluster = None
-            self.diffusion_coefficient = np.random.uniform(self.experiment.no_cluster_molecules_diffusion_coefficient_range[0], self.experiment.no_cluster_molecules_diffusion_coefficient_range[1])
-
-
-        else:
-          retry = True
-          while retry:
-            if self.cluster.is_inside(position=self.position_at(-1)):
-              displacement_x = self.generate_displacement('x') + cluster_displacement[0]
-              displacement_y = self.generate_displacement('y') + cluster_displacement[1]
-
-              new_x = displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
-              new_y = displacement_y + self.position_at(-1)[0] + cluster_displacement[1]
-
-              if not self.cluster.is_inside(position=np.array([new_x, new_y])):
-                new_x = -displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
-                new_y = displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
-                if not self.cluster.is_inside(position=np.array([new_x, new_y])):
-                  new_x = displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
-                  new_y = -displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
-                  if not self.cluster.is_inside(position=np.array([new_x, new_y])):
-                    new_x = -displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
-                    new_y = -displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
-                    if self.cluster.is_inside(position=np.array([new_x, new_y])):
-                      retry = False
-                  else:
-                    retry = False
-                else:
-                  retry = False
-              else:
-                retry = False
-            else:
-              while retry:
-                displacement_x = self.generate_displacement('x')
-                displacement_y = self.generate_displacement('y')
-
-                new_x = displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
-                new_y = displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
-
-                new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
-                old_radio = self.cluster.distance_to_radio_from(self.position_at(-1))
-
-                if new_radio > old_radio:
-                  new_x = -displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
-                  new_y = displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
-                  new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
-                  if new_radio > old_radio:
-                    new_x = displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
-                    new_y = -displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
-                    new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
-                    if new_radio > old_radio:
-                      new_x = -displacement_x + self.position_at(-1)[0] + cluster_displacement[0]
-                      new_y = -displacement_y + self.position_at(-1)[1] + cluster_displacement[1]
-                      new_radio = self.cluster.distance_to_radio_from(np.array([new_x, new_y]))
-                      if new_radio <= old_radio:
-                        retry = False
-                    else:
-                      retry = False
-                  else:
-                    retry = False
-                else:
-                  retry = False
-
-        if self.can_be_retained and self.cluster is not None and not self.going_out_from_cluster:
-          p = self.cluster.probability_to_be_retained(self)
-          self.locked = np.random.choice([True, False], 1, p=[p, 1-p])[0]
-
+        self._move_as_clustered()
       else:
-        new_x = self.generate_displacement('x') + self.position_at(-1)[0]
-        new_y = self.generate_displacement('y') + self.position_at(-1)[1]  
+        self._move_as_free()  
 
       if self.experiment.save_memory:
-        self.positions = np.array([[new_x, new_y]])
+        self.positions = np.array([[self.new_x, self.new_y]])
       else:
-        self.positions = np.append(self.positions, [[new_x, new_y]], axis=0)
+        self.positions = np.append(self.positions, [[self.new_x, self.new_y]], axis=0)
 
     self.blinking_battery = max(self.blinking_battery-1,0)
 

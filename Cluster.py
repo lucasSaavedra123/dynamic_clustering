@@ -16,24 +16,30 @@ class Cluster():
 
   @classmethod
   def merge_clusters(cls, cluster1, cluster2):
-    
-    particle_positions = np.array([particle.position_at(-1).tolist() for particle in cluster1.particles+cluster2.particles])
-    particle_position_mean = np.mean(particle_positions, axis=0)
+    for particle in cluster1.particles:
+      particle.was_inside = cluster1.is_inside(particle)
+
+    for particle in cluster2.particles:
+      particle.was_inside = cluster2.is_inside(particle)
+
+    if cluster1.is_inside_of_cluster(cluster2):
+      new_position = cluster2.position_at(-1)
+    elif cluster2.is_inside_of_cluster(cluster1):
+      new_position = cluster1.position_at(-1)
+    else:
+      new_position = (cluster1.position_at(-1) + cluster2.position_at(-1))/2
 
     return Cluster(
       (cluster1.radio + cluster2.radio) / 2,
-      particle_position_mean,
+      new_position,
       0,
       (cluster1.centroid_diffusion_coefficient + cluster2.centroid_diffusion_coefficient) / 2,
       np.random.choice([cluster1.retention_probability_function.__class__, cluster2.retention_probability_function.__class__], 1)[0],
       np.random.choice([cluster1.lifetime, cluster2.lifetime], 1)[0],
       np.random.choice([cluster1.eccentricity_maximum, cluster2.eccentricity_maximum], 1)[0],
       cluster1.experiment,
-      initial_particles = [cluster1.particles+cluster2.particles]
+      initial_particles = cluster1.particles+cluster2.particles
     )
-
-  def all_particles_are_inside(self):
-    return all([self.is_inside(particle) for particle in self.particles])
 
   @property
   def eccentricity(self):
@@ -84,6 +90,7 @@ class Cluster():
     particle.diffusion_coefficient = self.centroid_diffusion_coefficient/factor
     particle.can_be_retained=np.random.choice([False, True], 1, p=[0.90, 0.10])
     particle.residence_time = Hypoexponential(self.experiment.residence_time_range).sample(1)[0]
+    particle.going_out_from_cluster = False
     particle.time_belonging_cluster = self.experiment.current_time
 
   def __init__(self, radio, initial_position, number_of_initial_particles, centroid_diffusion_coefficient, retention_probability_function, lifetime, eccentricity_maximum, experiment, initial_particles=[]):
@@ -99,13 +106,12 @@ class Cluster():
 
     bad_initial_shape = True
 
-    self.angle = np.random.uniform(0, 2*np.pi)
-
     while bad_initial_shape:
       self.width = np.random.uniform(self.experiment.radio_range[0], self.experiment.radio_range[1]) * 2
       self.height = np.random.uniform(self.experiment.radio_range[0], self.experiment.radio_range[1]) * 2
+      self.angle = np.random.uniform(0, 2*np.pi)
 
-      if self.width < radio * 2 or self.height < radio * 2 or self.eccentricity > self.eccentricity_maximum or (initial_particles != [] and not self.all_particles_are_inside()):
+      if self.width < radio * 2 or self.height < radio * 2 or self.eccentricity > self.eccentricity_maximum:
         bad_initial_shape = True
       else:
         bad_initial_shape = False
@@ -132,6 +138,7 @@ class Cluster():
         particle.can_be_retained=np.random.choice([False, True], 1, p=[0.90, 0.10])
         particle.residence_time = Hypoexponential(self.experiment.residence_time_range).sample(1)[0]
         particle.time_belonging_cluster = self.experiment.current_time
+        particle.cluster = self
 
     else:
       for _ in range(number_of_initial_particles):
@@ -168,11 +175,12 @@ class Cluster():
 
     if self.cluster_moving_to is not None:
       direction_to_another_cluster = self.cluster_moving_to.position_at(-1) - self.position_at(-1)
-      direction_to_another_cluster = direction_to_another_cluster / np.linalg.norm(direction_to_another_cluster)
-      new_x = direction_to_another_cluster[0] * np.abs(np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1))
-      new_y = direction_to_another_cluster[1] * np.abs(np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1))
+      new_x = self.position_at(-1)[0] + np.sign(direction_to_another_cluster[0]) * np.abs(np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1))
+      new_y = self.position_at(-1)[1] + np.sign(direction_to_another_cluster[1]) * np.abs(np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1))
 
-      assert self.cluster_moving_to.distance_to_radio_from(np.array([new_x, new_y])) <= self.cluster_moving_to.distance_to_radio_from(self.position_at(-1))
+      if not self.cluster_moving_to.distance_to_radio_from(np.array([new_x, new_y])) <= self.cluster_moving_to.distance_to_radio_from(self.position_at(-1)):
+        new_x = self.cluster_moving_to.position_at(-1)[0]
+        new_y = self.cluster_moving_to.position_at(-1)[1]
 
     self.positions = np.append(
       self.positions,
@@ -249,7 +257,7 @@ class Cluster():
     another_cluster.cluster_moving_to = self
 
   def can_merge_with(self, another_cluster):
-    return self.is_inside_of_cluster(another_cluster) or another_cluster.is_inside_of_cluster(self)
+    return another_cluster.cluster_moving_to is not None and another_cluster.cluster_moving_to == self and (self.is_inside_of_cluster(another_cluster) or another_cluster.is_inside_of_cluster(self) or np.array_equal(self.position_at(-1), another_cluster.position_at(-1)))
 
   def is_inside_of_cluster(self, another_cluster):
     self_particles_that_are_in_another_cluster = len([particle for particle in self.particles if another_cluster.is_inside(particle=particle)])
