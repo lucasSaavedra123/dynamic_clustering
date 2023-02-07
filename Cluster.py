@@ -88,7 +88,7 @@ class Cluster():
     particle.cluster = self
     factor = np.random.uniform(self.min_factor, self.max_factor)
     particle.diffusion_coefficient = self.centroid_diffusion_coefficient/factor
-    particle.can_be_retained=np.random.choice([False, True], 1, p=[0.90, 0.10])
+    particle.can_be_retained = np.random.choice([False, True], 1, p=[0.90, 0.10])[0]
     particle.residence_time = Hypoexponential(self.experiment.residence_time_range).sample(1)[0]
     particle.going_out_from_cluster = False
     particle.time_belonging_cluster = self.experiment.current_time
@@ -107,18 +107,16 @@ class Cluster():
     bad_initial_shape = True
 
     while bad_initial_shape:
-      self.width = np.random.uniform(self.experiment.radio_range[0], self.experiment.radio_range[1]) * 2
-      self.height = np.random.uniform(self.experiment.radio_range[0], self.experiment.radio_range[1]) * 2
+      self.width = np.random.uniform(radio, self.experiment.radio_range[1]) * 2
+      self.height = np.random.uniform(radio, self.experiment.radio_range[1]) * 2
       self.angle = np.random.uniform(0, 2*np.pi)
 
-      if self.width < radio * 2 or self.height < radio * 2 or self.eccentricity > self.eccentricity_maximum:
+      if self.eccentricity > self.eccentricity_maximum:
         bad_initial_shape = True
       else:
         bad_initial_shape = False
 
     self.lifetime = lifetime
-
-    self.cluster_change_direction = np.random.choice([-1, 1], 1, p=[0.5, 0.5])[0]
 
     self.centroid_diffusion_coefficient = centroid_diffusion_coefficient
     self.cluster_moving_to = None
@@ -135,7 +133,7 @@ class Cluster():
       for particle in self.particles:
         factor = np.random.uniform(self.min_factor, self.max_factor)
         particle.diffusion_coefficient = self.centroid_diffusion_coefficient/factor
-        particle.can_be_retained=np.random.choice([False, True], 1, p=[0.90, 0.10])
+        particle.can_be_retained=np.random.choice([False, True], 1, p=[0.90, 0.10])[0]
         particle.residence_time = Hypoexponential(self.experiment.residence_time_range).sample(1)[0]
         particle.time_belonging_cluster = self.experiment.current_time
         particle.cluster = self

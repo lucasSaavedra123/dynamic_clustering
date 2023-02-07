@@ -19,32 +19,33 @@ def generate_skewed_normal_distribution(mean, std, skewness, min_value, max_valu
 
 class Experiment():
   def __init__(self,
-               height,
-               width,
-               number_of_clusters_range,
-               radio_range,
-               number_of_particles_per_cluster_range,
-               number_of_initial_non_cluster_particles_range,
-               cluster_centroids_diffusion_coefficient_range,
-               no_cluster_molecules_diffusion_coefficient_range,
-               residence_time_range,
-               retention_probabilities_functions_for_each_cluster,
-               retention_probabilities,
-               lifetime_range,
-               lifetime_skewness,
-               lifetime_mean,
-               lifetime_std,
-               eccentricity_maximum,
-               minimum_level_of_percentage_molecules,
-               average_molecules_per_frame,
-               frame_rate,
-               maximum_frame,
-               plots_with_blinking = False,
-               save_memory = True #It is not efficient to hold whole temporal information of the experiment.
+                height,
+                width,
+                number_of_clusters_range,
+                radio_range,
+                number_of_particles_per_cluster_range,
+                cluster_centroids_diffusion_coefficient_range,
+                no_cluster_molecules_diffusion_coefficient_range,
+                residence_time_range,
+                retention_probabilities_functions_for_each_cluster,
+                retention_probabilities,
+                lifetime_range,
+                lifetime_skewness,
+                lifetime_mean,
+                lifetime_std,
+                eccentricity_maximum,
+                average_molecules_per_frame,
+                frame_rate,
+                maximum_frame,
+                number_of_initial_non_cluster_particles_range = None,
+                minimum_level_of_percentage_molecules = None,
+                plots_with_blinking = False,
+                save_memory = True #It is not efficient to hold whole temporal information of the experiment.
                ):
 
     self.height = height
     self.width = width
+    self.retention_probabilities_functions_for_each_cluster = retention_probabilities_functions_for_each_cluster
     self.max_retention_probability = max(retention_probabilities)
     self.min_retention_probability = min(retention_probabilities)
     self.frame_rate = frame_rate
@@ -68,8 +69,15 @@ class Experiment():
     self.lifetime_skewness = lifetime_skewness
     self.lifetime_mean = lifetime_mean
 
-    assert 0 <= minimum_level_of_percentage_molecules <= 1
+    if minimum_level_of_percentage_molecules is not None:
+      assert 0 <= minimum_level_of_percentage_molecules <= 1
+    elif number_of_initial_non_cluster_particles_range is not None:
+      assert number_of_initial_non_cluster_particles_range[0] <= number_of_initial_non_cluster_particles_range[1]
+    else:
+      assert minimum_level_of_percentage_molecules is None and number_of_initial_non_cluster_particles_range is None, "You have to pass a minimum level of percentage molecules or a number of initial non cluster particles range"
+
     self.minimum_level_of_percentage_molecules = minimum_level_of_percentage_molecules
+    self.number_of_initial_non_cluster_particles_range = number_of_initial_non_cluster_particles_range
     self.percentage_of_clustered_molecules = None
     self.clustered_molecules = None
     self.non_clustered_molecules = None
@@ -97,19 +105,33 @@ class Experiment():
     #for particle_index in range(np.random.randint(number_of_initial_non_cluster_particles_range[0], number_of_initial_non_cluster_particles_range[1]+1)):
     self.update_percentage_of_clustered_molecules()
 
-    while self.percentage_of_clustered_molecules > self.minimum_level_of_percentage_molecules:
-      self.particles_without_cluster.append(
-        Particle(
-          [np.random.uniform(0, self.width), np.random.uniform(0, self.height)],
-          np.random.uniform(no_cluster_molecules_diffusion_coefficient_range[0], no_cluster_molecules_diffusion_coefficient_range[1]),
-          self
+    if self.minimum_level_of_percentage_molecules is not None:
+      while self.percentage_of_clustered_molecules > self.minimum_level_of_percentage_molecules:
+        self.particles_without_cluster.append(
+          Particle(
+            [np.random.uniform(0, self.width), np.random.uniform(0, self.height)],
+            np.random.uniform(no_cluster_molecules_diffusion_coefficient_range[0], no_cluster_molecules_diffusion_coefficient_range[1]),
+            self
+          )
         )
-      )
+        self.update_percentage_of_clustered_molecules()
+    elif self.number_of_initial_non_cluster_particles_range:
+      number_of_initial_non_cluster_particles = int(np.random.uniform(self.number_of_initial_non_cluster_particles_range[0], self.number_of_initial_non_cluster_particles_range[1]+1))
+      for _ in range(number_of_initial_non_cluster_particles):
+        self.particles_without_cluster.append(
+          Particle(
+            [np.random.uniform(0, self.width), np.random.uniform(0, self.height)],
+            np.random.uniform(no_cluster_molecules_diffusion_coefficient_range[0], no_cluster_molecules_diffusion_coefficient_range[1]),
+            self
+          )
+        )
+
       self.update_percentage_of_clustered_molecules()
 
-    self.update_percentage_of_clustered_molecules()
     self.recharge_batteries()
+    self.scan_for_merging_clusters()
     self.scan_for_overlapping_clusters()
+    self.update_percentage_of_clustered_molecules()
     self.update_smlm_dataset()
 
   def plot(self, t=None, show=False):
@@ -163,7 +185,7 @@ class Experiment():
     for cluster in self.clusters:
       particles_that_dont_belong_no_more_to_cluster += cluster.move()
 
-      if len(cluster.particles) == 0:
+      if len(cluster.particles) == 0 or all([particle_in_cluster.locked for particle_in_cluster in cluster.particles]):
         clusters_to_remove.append(cluster)
 
     for cluster in clusters_to_remove:
@@ -173,6 +195,8 @@ class Experiment():
       particle.move()
 
     new_particles_without_cluster = []
+
+    self.scan_for_new_clusters()
 
     for particle in self.particles_without_cluster + particles_that_dont_belong_no_more_to_cluster:
         cluster_assigned = False
@@ -187,6 +211,8 @@ class Experiment():
 
     self.particles_without_cluster = new_particles_without_cluster
 
+    self.scan_for_merging_clusters()
+    self.scan_for_overlapping_clusters()
     self.update_percentage_of_clustered_molecules()
     self.recharge_batteries()
     self.update_smlm_dataset()
@@ -224,7 +250,7 @@ class Experiment():
 
       self.localizations_that_appear_until_now += len([particle for particle in all_particles if particle.blinking_battery != 0])
             
-  def update_percentage_of_clustered_molecules(self):
+  def update_percentage_of_clustered_molecules(self): 
     self.clustered_molecules = 0
     self.non_clustered_molecules = 0
     self.going_out_from_cluster_molecules = 0
@@ -238,7 +264,10 @@ class Experiment():
       if particle.going_out_from_cluster:
         self.going_out_from_cluster_molecules += 1
 
-    self.percentage_of_clustered_molecules = self.clustered_molecules/(self.clustered_molecules+self.non_clustered_molecules)
+    if self.clustered_molecules == 0:
+      self.percentage_of_clustered_molecules = 0
+    else:
+      self.percentage_of_clustered_molecules = self.clustered_molecules/(self.clustered_molecules+self.non_clustered_molecules)
 
   def one_more_superpass(self):
     return (self.clustered_molecules + self.going_out_from_cluster_molecules + 1)/(self.clustered_molecules+self.non_clustered_molecules) < self.minimum_level_of_percentage_molecules
@@ -274,9 +303,8 @@ class Experiment():
   def scan_for_overlapping_clusters(self):
     for cluster in self.clusters:
       for other_cluster in self.clusters:
-        if cluster != other_cluster:
-          if cluster.is_overlapping(other_cluster):
-            cluster.move_towards_to(other_cluster)
+        if cluster.cluster_moving_to is None and other_cluster.cluster_moving_to is None and cluster != other_cluster and cluster.is_overlapping(other_cluster):
+          cluster.move_towards_to(other_cluster)
 
   def scan_for_merging_clusters(self):
     
@@ -285,7 +313,7 @@ class Experiment():
     while cluster_index < len(self.clusters):
       for other_cluster in self.clusters:
         if self.clusters[cluster_index] != other_cluster:
-          if self.clusters[cluster_index].is_overlapping(other_cluster) and self.cluster[cluster_index].can_merge_with(other_cluster):
+          if self.clusters[cluster_index].can_merge_with(other_cluster):
             self.clusters.append(Cluster.merge_clusters(self.clusters[cluster_index], other_cluster))
             self.clusters.remove(other_cluster)
             self.clusters.remove(self.clusters[cluster_index])
@@ -293,6 +321,68 @@ class Experiment():
             break
 
       cluster_index += 1
+
+  def scan_for_new_clusters(self):
+    non_clustered_molecule_index = 0
+    non_clustered_molecules = [particle for particle in self.all_particles() if particle.cluster == None]
+
+    candidate_new_cluster = Cluster(
+        np.random.uniform(self.radio_range[0], self.radio_range[1]),
+        [self.width/2, self.height/2],
+        0,
+        np.random.uniform(self.cluster_centroids_diffusion_coefficient_range[0], self.cluster_centroids_diffusion_coefficient_range[1]),
+        np.random.choice(self.retention_probabilities_functions_for_each_cluster, 1)[0],
+        generate_skewed_normal_distribution(self.lifetime_mean, self.lifetime_std, self.lifetime_skewness, self.lifetime_range[0], self.lifetime_range[1]),
+        self.eccentricity_maximum,
+        self,
+        initial_particles=[]
+      )
+
+    while non_clustered_molecule_index < len(non_clustered_molecules):
+      particle = non_clustered_molecules[non_clustered_molecule_index]
+
+      particles_sorted_by_distance = sorted(non_clustered_molecules, key=lambda x: np.linalg.norm(particle.position_at(-1) - x.position_at(-1)))
+      positions_of_all_particles_in_system = np.array([[]])
+      list_of_new_particles = []
+      old_centroid = None
+
+      for neighbor_particle in particles_sorted_by_distance:
+        if len(list_of_new_particles) == 0:
+          positions_of_all_particles_in_system = np.append(positions_of_all_particles_in_system, np.array([neighbor_particle.position_at(-1)]), axis=1)
+        else:
+          positions_of_all_particles_in_system = np.append(positions_of_all_particles_in_system, np.array([neighbor_particle.position_at(-1)]), axis=0)
+
+        candidate_new_cluster.positions = np.array([np.mean(positions_of_all_particles_in_system, axis=0)])
+
+        if all([candidate_new_cluster.is_inside(particle_aux) for particle_aux in list_of_new_particles+[neighbor_particle]]):
+          list_of_new_particles.append(neighbor_particle)
+          old_centroid = candidate_new_cluster.positions
+        else:
+          break
+
+      candidate_new_cluster.positions = old_centroid
+
+      if len(list_of_new_particles) >= min(self.number_of_particles_per_cluster_range):
+        for new_clustered_particle in list_of_new_particles:
+          non_clustered_molecules.remove(new_clustered_particle)
+
+        self.clusters.append(candidate_new_cluster)
+        non_clustered_molecule_index = 0
+
+        candidate_new_cluster = Cluster(
+            np.random.uniform(self.radio_range[0], self.radio_range[1]),
+            [self.width/2, self.height/2],
+            0,
+            np.random.uniform(self.cluster_centroids_diffusion_coefficient_range[0], self.cluster_centroids_diffusion_coefficient_range[1]),
+            np.random.choice(self.retention_probabilities_functions_for_each_cluster, 1)[0],
+            generate_skewed_normal_distribution(self.lifetime_mean, self.lifetime_std, self.lifetime_skewness, self.lifetime_range[0], self.lifetime_range[1]),
+            self.eccentricity_maximum,
+            self,
+            initial_particles=[]
+          )
+
+      else:
+        non_clustered_molecule_index += 1
 
   @property
   def current_time(self):
