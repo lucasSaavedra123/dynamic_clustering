@@ -27,6 +27,7 @@ class Experiment():
                 cluster_centroids_diffusion_coefficient_range,
                 no_cluster_molecules_diffusion_coefficient_range,
                 residence_time_range,
+                anomalous_exponent_range,
                 retention_probabilities_functions_for_each_cluster,
                 retention_probabilities,
                 lifetime_range,
@@ -43,6 +44,7 @@ class Experiment():
                 save_memory = True #It is not efficient to hold whole temporal information of the experiment.
                ):
 
+    self.anomalous_exponent_range = anomalous_exponent_range
     self.height = height
     self.width = width
     self.retention_probabilities_functions_for_each_cluster = retention_probabilities_functions_for_each_cluster

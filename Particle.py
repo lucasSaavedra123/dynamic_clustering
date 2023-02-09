@@ -37,7 +37,7 @@ class Particle():
     self.gn_memory_x = None
     self.gn_memory_y = None
 
-    self.anomalous_exponent = np.random.uniform(0,2)
+    self.anomalous_exponent = np.random.uniform(experiment.anomalous_exponent_range[0], experiment.anomalous_exponent_range[1])
 
   def position_at(self, t):
     return self.positions[t, :]
