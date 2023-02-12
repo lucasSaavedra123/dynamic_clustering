@@ -7,7 +7,13 @@ from scipy.stats import skewnorm
 from Cluster import Cluster
 from Particle import Particle
 
-from math import ceil
+from math import ceil, sqrt, pow
+
+def custom_norm(vector_one, vector_two):
+  a = pow(vector_one[0] - vector_two[0], 2)
+  b = pow(vector_one[1] - vector_two[1], 2)
+  #assert np.linalg.norm(vector_one-vector_two) == sqrt(a+b)
+  return sqrt(a+b)
 
 def generate_skewed_normal_distribution(mean, std, skewness, min_value, max_value):
   r = skewnorm.rvs(skewness, loc=mean, scale=std, size=1)[0]
@@ -343,7 +349,28 @@ class Experiment():
     while non_clustered_molecule_index < len(non_clustered_molecules):
       particle = non_clustered_molecules[non_clustered_molecule_index]
 
-      particles_sorted_by_distance = sorted(non_clustered_molecules, key=lambda x: np.linalg.norm(particle.position_at(-1) - x.position_at(-1)))
+      """
+      We used to call np.linalg.norm to measure the distance between points:
+
+      particles_sorted_by_distance = sorted(
+        non_clustered_molecules,
+        key=lambda x: np.linalg.norm(particle.position_at(-1) - x.position_at(-1))
+      )
+
+      After a profiling analysis done to the simulation, we found out that 
+      np.linalg.norm was quite slow. Then, we were wondering if this was something
+      related with the numpy implementation or was a CPU-related problem.
+
+      To answer this, we implemented the function 'custom_norm'. The times changed
+      drastically:
+
+      One move with np.linalg.norm: 54.602 seconds
+      One move with custom_norm: 22.344 seconds
+
+      Apparently, np.linalg.norm has little overhead for little arrays
+      """
+
+      particles_sorted_by_distance = sorted(non_clustered_molecules, key=lambda x: custom_norm(particle.position_at(-1), x.position_at(-1)))
       positions_of_all_particles_in_system = np.array([[]])
       list_of_new_particles = []
       old_centroid = None
