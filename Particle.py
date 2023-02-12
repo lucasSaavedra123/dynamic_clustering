@@ -4,6 +4,7 @@ import pickle
 from functools import lru_cache
 from os.path import exists
 import itertools
+from TrajectoryDisplacementGenerator import TrajectoryDisplacementGenerator
 
 def fgn_autocovariance(hurst, n):
     """Autocovariance function for fGn."""
@@ -34,10 +35,13 @@ class Particle():
 
     self.direction = 1
 
-    self.gn_memory_x = None
-    self.gn_memory_y = None
-
     self.anomalous_exponent = np.random.uniform(experiment.anomalous_exponent_range[0], experiment.anomalous_exponent_range[1])
+
+    self.displacement_generator_x = TrajectoryDisplacementGenerator(self.anomalous_exponent, self.experiment.maximum_frame)
+    self.displacement_generator_x_as_iterator = iter(self.displacement_generator_x)
+
+    self.displacement_generator_y = TrajectoryDisplacementGenerator(self.anomalous_exponent, self.experiment.maximum_frame)
+    self.displacement_generator_y_as_iterator = iter(self.displacement_generator_y)
 
   def position_at(self, t):
     return self.positions[t, :]
@@ -154,6 +158,8 @@ class Particle():
       else:
         self.positions = np.append(self.positions, [[self.new_x, self.new_y]], axis=0)
 
+    self.displacement_generator_x.next_step()
+    self.displacement_generator_y.next_step()
     self.blinking_battery = max(self.blinking_battery-1,0)
 
   @property
@@ -168,100 +174,12 @@ class Particle():
       return 'red'
 
   def generate_displacement(self, axis):
-    """Generate fractional Gaussian noise using Hosking's method.
-
-    Method of generation is Hosking's method (exact method) from his paper:
-    Hosking, J. R. (1984). Modeling persistence in hydrological time series
-    using fractional differencing. Water resources research, 20(12),
-    1898-1908.
-
-    Hosking's method generates a fractional Gaussian noise (fGn)
-    realization. The cumulative sum of this realization gives a fBm.
-    """
-    # For scaling to interval [0, T]
-    increment = 1 / self.experiment.maximum_frame
-    hurst = self.anomalous_exponent/2
-    scale = increment**hurst
-
     if axis=='x':
-      if self.gn_memory_x is None:
-          self.gn_memory_x = np.random.normal(0.0, 1.0, self.experiment.maximum_frame)
-
-      self.gn_memory_x[self.experiment.time] = np.random.normal(0.0, 1.0, 1)
-      gn = self.gn_memory_x.copy()
+      generated_displacement = next(self.displacement_generator_x_as_iterator)
     elif axis=='y':
-      if self.gn_memory_y is None:
-          self.gn_memory_y = np.random.normal(0.0, 1.0, self.experiment.maximum_frame)
+      generated_displacement = next(self.displacement_generator_y_as_iterator)
 
-      self.gn_memory_y[self.experiment.time] = np.random.normal(0.0, 1.0, 1)
-      gn = self.gn_memory_y.copy()
-    # If H = 0.5 then just generate a standard Brownian motion, otherwise
-    # proceed with Hosking's method
-    if hurst == 0.5:
-        fgn = gn
-    else:
-        # Initializations
-        fgn = np.zeros(self.experiment.maximum_frame)
-        phi = np.zeros(self.experiment.maximum_frame)
-        psi = np.zeros(self.experiment.maximum_frame)
+    generated_displacement *= np.sqrt(self.experiment.maximum_frame)**(self.anomalous_exponent)
+    generated_displacement *= np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate)
 
-        if not exists(f'./cache/cov_{self.id}'):
-          with open(f'./cache/cov_{self.id}', 'wb') as file:
-            pickle.dump(autocovariance(hurst, self.experiment.maximum_frame), file)
-
-        with open(f'./cache/cov_{self.id}', 'rb') as f:
-            cov = pickle.load(f)
-
-        if not exists(f'./cache/v_memory_{self.id}'):
-          v_memory = {}
-          phi_memory = {}
-          v = 1
-          for i in range(1, self.experiment.maximum_frame):
-            phi[i - 1] = cov[i]
-            for j in range(i - 1):
-                psi[j] = phi[j]
-                phi[i - 1] -= psi[j] * cov[i - j - 1]
-            phi[i - 1] /= v
-            for j in range(i - 1):
-                phi[j] = psi[j] - phi[i - 1] * psi[i - j - 2]
-            
-            phi_memory[i] = phi.copy()
-
-            v *= 1 - phi_memory[i][i - 1] * phi_memory[i][i - 1]
-            v_memory[i] = v
-
-            with open(f'./cache/v_memory_{self.id}', 'wb') as file:
-              pickle.dump(v_memory, file)
-
-            with open(f'./cache/phi_memory_{self.id}', 'wb') as file:
-              pickle.dump(phi_memory, file)
-       
-        with open(f'./cache/phi_memory_{self.id}', 'rb') as f:
-            phi_memory = pickle.load(f)
-
-        with open(f'./cache/v_memory_{self.id}', 'rb') as f:
-            v_memory = pickle.load(f)
-
-        # First increment from stationary distribution
-        fgn[0] = gn[0]
-        v = 1
-        phi[0] = 0
-
-        if self.experiment.time != 0:
-          # Generates fgn realization with n increments of size 1
-          for i in range(1, self.experiment.maximum_frame):              
-              for j in range(i):
-                  fgn[i] += phi_memory[i][j] * fgn[i - j - 1]
-              fgn[i] += np.sqrt(v_memory[i]) * gn[i]
-
-              if i == self.experiment.time:
-                break
-
-    # Scale to interval [0, T]
-    fgn *= scale
-
-    displacement = fgn[self.experiment.time]
-    displacement *= np.sqrt(self.experiment.maximum_frame)**(self.anomalous_exponent)
-    displacement *= np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate)
-
-    return displacement
+    return generated_displacement
