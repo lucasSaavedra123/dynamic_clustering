@@ -149,28 +149,26 @@ class Experiment():
     fig = plt.figure()
     ax = fig.add_subplot()
     particle_size = 1
-
-    clustered_particles = 0
-    non_clustered_particles = 0
+    clustered_particles = []
 
     for cluster in self.clusters:
-      clustered_particles += len(cluster.particles)
-      for particle in cluster.particles:
-        if not self.plots_with_blinking or particle.blinking_battery != 0:
-          ax.scatter(particle.position_at(t)[0], particle.position_at(t)[1], color=particle.color, s=particle_size)
-
       ax.add_patch(Ellipse( xy=cluster.position_at(t), width=cluster.width, height=cluster.height, angle=cluster.angle*360, fill = False))
+      clustered_particles += cluster.particles
       #ax.add_patch(plt.Circle( cluster.positions[t,:], cluster.radio , fill = False , linestyle='--'))
       #ax.add_patch(plt.Circle( cluster.positions[t,:], cluster.outer_region.max_radio , fill = False , linestyle='--'))
       #ax.add_patch(plt.Circle( cluster.positions[t,:], cluster.inner_region.min_radio , fill = False , linestyle='--'))
       #ax.add_patch(plt.Circle( cluster.positions[t,:], cluster.center_region.max_radio , fill = False , linestyle='--'))
       #ax.scatter(cluster.positions[t,0], cluster.positions[t,1], marker="X", color="black", s=particle_size)
 
-    non_clustered_particles += len(self.particles_without_cluster)
+    clustered_particles_as_array = np.array([particle.position_at(t) for particle in clustered_particles if not self.plots_with_blinking or particle.blinking_battery != 0])
 
-    for particle in self.particles_without_cluster:
-      if not self.plots_with_blinking or particle.blinking_battery != 0:
-        ax.scatter(particle.position_at(t)[0], particle.position_at(t)[1], color=particle.color, s=particle_size)
+    if len(clustered_particles_as_array) > 0:
+      ax.scatter(clustered_particles_as_array[:,0], clustered_particles_as_array[:,1], color=clustered_particles[0].color, s=particle_size)
+
+    non_clustered_particles_as_array = np.array([particle.position_at(t) for particle in self.particles_without_cluster if not self.plots_with_blinking or particle.blinking_battery != 0])
+
+    if len(non_clustered_particles_as_array) > 0:
+      ax.scatter(non_clustered_particles_as_array[:,0], non_clustered_particles_as_array[:,1], color=self.particles_without_cluster[0].color, s=particle_size)
 
     ax.set_aspect('equal')
     ax.set_title(f'Clustered Particles:{round(self.percentage_of_clustered_molecules*100, 2)}%, t={self.time*10}ms')
@@ -346,6 +344,26 @@ class Experiment():
         initial_particles=[]
       )
 
+    """
+    Distance between particles is symmetric: d(p_1, p_2) = d(p_2, p_1)
+    """
+
+    distance_dictionary = {}
+
+    for molecule_one_index in range(len(non_clustered_molecules)):
+      molecule_one = non_clustered_molecules[molecule_one_index]
+      distance_dictionary[molecule_one] = {}
+
+      for molecule_two_index in range(molecule_one_index, len(non_clustered_molecules)):
+        molecule_two = non_clustered_molecules[molecule_two_index]
+        distance_dictionary[molecule_one][molecule_two] = custom_norm(molecule_one.position_at(-1), molecule_two.position_at(-1))
+
+    def get_distance_between_molecules(molecule_one, molecule_two):
+      if molecule_two in distance_dictionary[molecule_one]:
+        return distance_dictionary[molecule_one][molecule_two]
+      else:
+        return distance_dictionary[molecule_two][molecule_one]
+
     while non_clustered_molecule_index < len(non_clustered_molecules):
       particle = non_clustered_molecules[non_clustered_molecule_index]
 
@@ -370,7 +388,7 @@ class Experiment():
       Apparently, np.linalg.norm has little overhead for little arrays
       """
 
-      particles_sorted_by_distance = sorted(non_clustered_molecules, key=lambda x: custom_norm(particle.position_at(-1), x.position_at(-1)))
+      particles_sorted_by_distance = sorted(non_clustered_molecules, key=lambda x: get_distance_between_molecules(particle, x))
       positions_of_all_particles_in_system = np.array([[]])
       list_of_new_particles = []
       old_centroid = None

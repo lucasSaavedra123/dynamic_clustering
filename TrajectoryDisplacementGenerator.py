@@ -41,7 +41,7 @@ class TrajectoryDisplacementGenerator:
 
             while not self.next_step_flag:
                 gn = np.random.normal(0, 1, self.maximum_frame)
-                yield gn[0]
+                yield gn[0] * self.scale
 
             self.next_step_flag = False
 
