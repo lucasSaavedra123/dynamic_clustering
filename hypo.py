@@ -1,9 +1,7 @@
+# Code from https://github.com/kevinzagalo/hypoexponential/blob/main/hypoexp.py
 from numpy import prod, zeros, random, array, cumsum, sqrt
 from math import exp
-from numpy import linspace, array
-import matplotlib.pyplot as plt
 
-#https://github.com/kevinzagalo/hypoexponential
 
 class Hypoexponential:
     # only works if the parameters eta are distinct

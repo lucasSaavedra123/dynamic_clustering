@@ -1,7 +1,6 @@
-import numpy as np
-
 from functools import lru_cache
 
+import numpy as np
 
 def fgn_autocovariance(hurst, n):
     """Autocovariance function for fGn."""

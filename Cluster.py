@@ -2,9 +2,8 @@ import itertools
 
 import numpy as np
 
-from Particle import Particle
-
 from hypo import Hypoexponential
+from Particle import Particle
 
 class Cluster():
   id_obj = itertools.count(1)
