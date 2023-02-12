@@ -15,6 +15,17 @@ def custom_norm(vector_one, vector_two):
   #assert np.linalg.norm(vector_one-vector_two) == sqrt(a+b)
   return sqrt(a+b)
 
+def custom_mean(vector):
+
+  number_of_elements = 0
+  sum = 0
+
+  for i in vector:
+    sum += i
+    number_of_elements += 1
+
+  return sum/number_of_elements
+
 def generate_skewed_normal_distribution(mean, std, skewness, min_value, max_value):
   r = skewnorm.rvs(skewness, loc=mean, scale=std, size=1)[0]
 
@@ -399,7 +410,7 @@ class Experiment():
         else:
           positions_of_all_particles_in_system = np.append(positions_of_all_particles_in_system, np.array([neighbor_particle.position_at(-1)]), axis=0)
 
-        candidate_new_cluster.positions = np.array([np.mean(positions_of_all_particles_in_system, axis=0)])
+        candidate_new_cluster.positions = np.array([[custom_mean(positions_of_all_particles_in_system[:, 0]), custom_mean(positions_of_all_particles_in_system[:, 1])]])
 
         if all([candidate_new_cluster.is_inside(particle_aux) for particle_aux in list_of_new_particles+[neighbor_particle]]):
           list_of_new_particles.append(neighbor_particle)
@@ -434,3 +445,8 @@ class Experiment():
   @property
   def current_time(self):
     return self.time * self.frame_rate
+
+  def save_plot(self, path="./images", dpi=200):
+    self.plot(show=False)
+    plt.savefig(f"{path}/{str(self.time).zfill(10)}.jpg", dpi=dpi)
+    plt.close()

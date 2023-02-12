@@ -3,13 +3,6 @@ from functools import lru_cache
 import itertools
 from TrajectoryDisplacementGenerator import TrajectoryDisplacementGenerator
 
-def fgn_autocovariance(hurst, n):
-    """Autocovariance function for fGn."""
-    ns_2h = np.arange(n + 1) ** (2 * hurst)
-    return np.insert((ns_2h[:-2] - 2 * ns_2h[1:-1] + ns_2h[2:]) / 2, 0, 1)
-
-autocovariance = lru_cache(1)(fgn_autocovariance)
-
 class Particle():
   id_obj = itertools.count(1)
   def __init__(self, initial_position, diffusion_coefficient, experiment, can_be_retained=False, cluster = None, residence_time = None):
