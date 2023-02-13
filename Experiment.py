@@ -452,3 +452,11 @@ class Experiment():
     self.plot(show=False)
     plt.savefig(f"{path}/{str(self.time).zfill(10)}.jpg", dpi=dpi)
     plt.close()
+
+  def summary(self):
+    print("All attributes:")
+    for attribute in self.__dict__:
+      if attribute in ['smlm_dataset_rows', 'clusters', 'particles_without_cluster', 'all_particles']:
+        print(f"{attribute}: {len(self.__dict__[attribute])}")
+      else:
+        print(f"{attribute}: {self.__dict__[attribute]}")
