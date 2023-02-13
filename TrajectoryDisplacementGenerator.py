@@ -72,6 +72,7 @@ class TrajectoryDisplacementGenerator:
 
                 if self.next_step_flag:
                     position_index += 1
+                    self.next_step_flag = False
                 else:
                     gn[position_index] = np.random.normal(0, 1)
                     fgn[position_index] = 0
