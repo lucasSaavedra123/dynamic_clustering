@@ -149,6 +149,13 @@ class Experiment():
 
       self.update_percentage_of_clustered_molecules()
 
+    self.all_particles = []
+
+    for cluster in self.clusters:
+      self.all_particles += cluster.particles
+    
+    self.all_particles += self.particles_without_cluster
+
     self.recharge_batteries()
     self.scan_for_merging_clusters()
     self.scan_for_overlapping_clusters()
@@ -238,13 +245,7 @@ class Experiment():
     self.time += 1
 
   def recharge_batteries(self):
-
-    all_particles = []
-
-    for cluster in self.clusters:
-      all_particles += cluster.particles
-    
-    all_particles += self.particles_without_cluster
+    all_particles = [particle for particle in self.all_particles if particle.in_fov()]
 
     if self.first_recharge == True:
       self.first_recharge = False
@@ -292,8 +293,8 @@ class Experiment():
     return (self.clustered_molecules + self.going_out_from_cluster_molecules + 1)/(self.clustered_molecules+self.non_clustered_molecules) < self.minimum_level_of_percentage_molecules
   
   def update_smlm_dataset(self):
-    for particle in self.all_particles():
-      if particle.blinking_battery != 0:
+    for particle in self.all_particles:
+      if particle.in_fov() and particle.blinking_battery != 0:
         self.smlm_dataset_rows.append({
           'x': particle.position_at(-1)[0],
           'y': particle.position_at(-1)[1],
@@ -308,16 +309,6 @@ class Experiment():
       for row in self.smlm_dataset_rows:
           data.append(row)
       return pd.DataFrame(data)
-
-  def all_particles(self):
-    all_particles = []
-
-    for cluster in self.clusters:
-      all_particles += cluster.particles
-    
-    all_particles += self.particles_without_cluster
-
-    return all_particles
 
   def scan_for_overlapping_clusters(self):
     for cluster in self.clusters:
@@ -343,7 +334,7 @@ class Experiment():
 
   def scan_for_new_clusters(self):
     non_clustered_molecule_index = 0
-    non_clustered_molecules = [particle for particle in self.all_particles() if particle.cluster == None]
+    non_clustered_molecules = [particle for particle in self.all_particles if particle.cluster == None]
 
     candidate_new_cluster = Cluster(
         np.random.uniform(self.radio_range[0], self.radio_range[1]),

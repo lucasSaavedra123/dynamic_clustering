@@ -33,6 +33,14 @@ class Particle():
     self.displacement_generator_y = TrajectoryDisplacementGenerator(self.anomalous_exponent, self.experiment.maximum_frame)
     self.displacement_generator_y_as_iterator = iter(self.displacement_generator_y)
 
+  def in_fov(self):
+    position = self.position_at(-1)
+    
+    is_horizontally = 0 <= position[0] <= self.experiment.width
+    is_vertically = 0 <= position[1] <= self.experiment.height
+
+    return is_horizontally and is_vertically
+
   def position_at(self, t):
     return self.positions[t, :]
 
