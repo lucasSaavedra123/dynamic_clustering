@@ -52,7 +52,7 @@ class Experiment():
                 frame_rate,
                 maximum_frame,
                 number_of_initial_non_cluster_particles_range = None,
-                minimum_level_of_percentage_molecules = None,
+                minimum_level_of_percentage_molecules_range = None,
                 plots_with_blinking = False,
                 save_memory = True #It is not efficient to hold whole temporal information of the experiment.
                ):
@@ -84,12 +84,18 @@ class Experiment():
     self.lifetime_skewness = lifetime_skewness
     self.lifetime_mean = lifetime_mean
 
-    if minimum_level_of_percentage_molecules is not None:
-      assert 0 <= minimum_level_of_percentage_molecules <= 1
+    if minimum_level_of_percentage_molecules_range is None:
+      minimum_level_of_percentage_molecules = None
+
+    if minimum_level_of_percentage_molecules_range is not None:
+      assert 0 <= minimum_level_of_percentage_molecules_range[0] <= 1
+      assert 0 <= minimum_level_of_percentage_molecules_range[1] <= 1
+      assert minimum_level_of_percentage_molecules_range[0] <= minimum_level_of_percentage_molecules_range[1]
+      minimum_level_of_percentage_molecules = np.random.uniform(minimum_level_of_percentage_molecules_range[0], minimum_level_of_percentage_molecules_range[1])
     elif number_of_initial_non_cluster_particles_range is not None:
       assert number_of_initial_non_cluster_particles_range[0] <= number_of_initial_non_cluster_particles_range[1]
     else:
-      assert minimum_level_of_percentage_molecules is None and number_of_initial_non_cluster_particles_range is None, "You have to pass a minimum level of percentage molecules or a number of initial non cluster particles range"
+      assert minimum_level_of_percentage_molecules_range is None and number_of_initial_non_cluster_particles_range is None, "You have to pass a minimum level of percentage molecules or a number of initial non cluster particles range"
 
     self.minimum_level_of_percentage_molecules = minimum_level_of_percentage_molecules
     self.number_of_initial_non_cluster_particles_range = number_of_initial_non_cluster_particles_range
