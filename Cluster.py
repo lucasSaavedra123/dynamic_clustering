@@ -10,11 +10,6 @@ from utils import custom_norm
 class Cluster():
   id_obj = itertools.count(1)
 
-  """
-  def is_inside(self, particle):
-    return np.linalg.norm(self.position_at(-1) - particle.position_at(-1)) < self.radio
-  """
-
   @classmethod
   def merge_clusters(cls, cluster1, cluster2):
     for particle in cluster1.particles:
@@ -137,6 +132,7 @@ class Cluster():
         particle.can_be_retained=np.random.choice([False, True], 1, p=[0.90, 0.10])[0]
         particle.residence_time = Hypoexponential(self.experiment.residence_time_range).sample(1)[0]
         particle.time_belonging_cluster = self.experiment.current_time
+        particle.was_inside = None
         particle.cluster = self
 
     else:
@@ -187,15 +183,6 @@ class Cluster():
         new_x,
         new_y
       ]], axis=0)
-
-    """
-    while not all([self.is_inside(particle) for particle in self.particles]):
-      new_x = self.position_at(-2)[0] + np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1)
-      new_y = self.position_at(-2)[1] + np.sqrt(2*self.centroid_diffusion_coefficient*self.experiment.frame_rate) * np.random.normal(0,1)
-
-      self.positions[-1, 0] = new_x
-      self.positions[-1, 1] = new_y
-    """
 
     self.change_cluster_shape()
 
