@@ -5,6 +5,8 @@ import numpy as np
 from hypo import Hypoexponential
 from Particle import Particle
 
+from utils import custom_norm
+
 class Cluster():
   id_obj = itertools.count(1)
 
@@ -80,7 +82,7 @@ class Cluster():
     return (xct**2/(g_ell_width/2.)**2) + (yct**2/(g_ell_height/2.)**2) <= 1
 
   def distance_to_radio_from(self, position, t=-1):
-    return np.linalg.norm(position - self.position_at(t))
+    return custom_norm(position, self.position_at(t))
 
   def add_particle(self, particle):
     self.particles.append(particle)
