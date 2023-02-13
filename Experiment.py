@@ -51,12 +51,16 @@ class Experiment():
                 average_molecules_per_frame,
                 frame_rate,
                 maximum_frame,
+                mean_localization_error,
+                std_localization_error,
                 number_of_initial_non_cluster_particles_range = None,
                 minimum_level_of_percentage_molecules_range = None,
                 plots_with_blinking = False,
                 save_memory = True #It is not efficient to hold whole temporal information of the experiment.
                ):
 
+    self.mean_localization_error = mean_localization_error
+    self.std_localization_error = std_localization_error
     self.anomalous_exponent_range = anomalous_exponent_range
     self.height = height
     self.width = width
@@ -292,12 +296,17 @@ class Experiment():
   def one_more_superpass(self):
     return (self.clustered_molecules + self.going_out_from_cluster_molecules + 1)/(self.clustered_molecules+self.non_clustered_molecules) < self.minimum_level_of_percentage_molecules
   
+  def generate_noise(self):
+    error = np.random.normal(loc=self.mean_localization_error / 2, scale=self.std_localization_error / 2, size=1)[0]
+    error_sign = np.random.choice([-1, 1], size=1)[0]
+    return error * error_sign
+
   def update_smlm_dataset(self):
     for particle in self.all_particles:
       if particle.in_fov() and particle.blinking_battery != 0:
         self.smlm_dataset_rows.append({
-          'x': particle.position_at(-1)[0],
-          'y': particle.position_at(-1)[1],
+          'x': particle.position_at(-1)[0] + self.generate_noise(),
+          'y': particle.position_at(-1)[1] + self.generate_noise(),
           't': self.time * self.frame_rate,
           'frame': self.time,
           'clusterized': int(particle.cluster != None),
