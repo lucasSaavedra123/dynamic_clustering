@@ -34,6 +34,7 @@ class TrajectoryDisplacementGenerator:
             fgn = np.zeros(self.maximum_frame)
             phi = np.zeros(self.maximum_frame)
             psi = np.zeros(self.maximum_frame)
+            v = np.zeros(self.maximum_frame)
             cov = autocovariance(self.hurst, self.maximum_frame)
 
             # First increment from stationary distribution
@@ -45,33 +46,33 @@ class TrajectoryDisplacementGenerator:
             self.next_step_flag = False
 
             fgn[0] = gn[0]
-            v = 1
-            old_v = 1
+            #v = 1
+            v[0] = 1
             phi[0] = 0
             position_index = 1
 
             # Generates fgn realization with n increments of size 1
             #for i in range(1, self.maximum_frame):
             while position_index < self.maximum_frame:
-                phi[position_index - 1] = cov[position_index]
-                for j in range(position_index - 1):
-                    psi[j] = phi[j]
-                    phi[position_index - 1] -= psi[j] * cov[position_index - j - 1]
-                phi[position_index - 1] /= v
-                for j in range(position_index - 1):
-                    phi[j] = psi[j] - phi[position_index - 1] * psi[position_index - j - 2]
-                old_v = v
-                v *= 1 - phi[position_index - 1] * phi[position_index - 1]
+                if v[position_index] == 0:
+                    phi[position_index - 1] = cov[position_index]
+                    for j in range(position_index - 1):
+                        psi[j] = phi[j]
+                        phi[position_index - 1] -= psi[j] * cov[position_index - j - 1]
+                    phi[position_index - 1] /= v[position_index-1]
+                    for j in range(position_index - 1):
+                        phi[j] = psi[j] - phi[position_index - 1] * psi[position_index - j - 2]
+                    v[position_index] = v[position_index-1] * (1 - phi[position_index - 1] * phi[position_index - 1])
+
                 for j in range(position_index):
                     fgn[position_index] += phi[j] * fgn[position_index - j - 1]
-                fgn[position_index] += np.sqrt(v) * gn[position_index]
+                fgn[position_index] += np.sqrt(v[position_index]) * gn[position_index]
 
                 yield fgn[position_index] * self.scale
 
                 if self.next_step_flag:
                     position_index += 1
                 else:
-                    v = old_v
                     gn[position_index] = np.random.normal(0, 1)
                     fgn[position_index] = 0
 
