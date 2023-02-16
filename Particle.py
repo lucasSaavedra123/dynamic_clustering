@@ -14,6 +14,8 @@ class Particle():
     self.diffusion_coefficient = diffusion_coefficient
     self.experiment = experiment
 
+    self.previous_cluster = None
+
     #Flagd and 'Blinking Battery'
     self.locked = False
     self.going_out_from_cluster = False
@@ -110,6 +112,7 @@ class Particle():
 
     if self.cluster is not None:
       if not self.cluster.is_inside(self):
+        self.previous_cluster = self.cluster
         self.cluster = None
 
         if np.random.choice([False, True], 1, p=[0.50, 0.50])[0]:
@@ -130,6 +133,7 @@ class Particle():
 
       if not self.cluster.is_inside(position=np.array([self.new_x, self.new_y])):
         self.going_out_from_cluster = False
+        self.previous_cluster = self.cluster
         self.cluster = None
         self.diffusion_coefficient = np.random.uniform(self.experiment.no_cluster_molecules_diffusion_coefficient_range[0], self.experiment.no_cluster_molecules_diffusion_coefficient_range[1])
     else:
@@ -181,3 +185,13 @@ class Particle():
     generated_displacement *= np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate)
 
     return generated_displacement
+
+  def came_from_existent_cluster(self):
+    if self.previous_cluster is not None:
+      if self.previous_cluster.exist:
+        return True
+      else:
+        self.previous_cluster = None
+        return False
+    else:
+      return False

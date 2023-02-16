@@ -99,6 +99,7 @@ class Cluster():
     self.eccentricity_maximum = eccentricity_maximum
     self.retention_probability_function = retention_probability_function() # We create an instance of it
     self.id = next(Cluster.id_obj)
+    self.exist = True
 
     bad_initial_shape = True
 

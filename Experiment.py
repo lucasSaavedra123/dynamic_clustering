@@ -187,12 +187,12 @@ class Experiment():
     clustered_particles_as_array = np.array([particle.position_at(t) for particle in clustered_particles if not self.plots_with_blinking or particle.blinking_battery != 0])
 
     if len(clustered_particles_as_array) > 0:
-      ax.scatter(clustered_particles_as_array[:,0], clustered_particles_as_array[:,1], color=clustered_particles[0].color, s=particle_size)
+      ax.scatter(clustered_particles_as_array[:,0], clustered_particles_as_array[:,1], color=[a_particle.color for a_particle in clustered_particles], s=particle_size)
 
     non_clustered_particles_as_array = np.array([particle.position_at(t) for particle in self.particles_without_cluster if not self.plots_with_blinking or particle.blinking_battery != 0])
 
     if len(non_clustered_particles_as_array) > 0:
-      ax.scatter(non_clustered_particles_as_array[:,0], non_clustered_particles_as_array[:,1], color=self.particles_without_cluster[0].color, s=particle_size)
+      ax.scatter(non_clustered_particles_as_array[:,0], non_clustered_particles_as_array[:,1], color=[a_particle.color for a_particle in self.particles_without_cluster], s=particle_size)
 
     ax.set_aspect('equal')
     ax.set_title(f'Clustered Particles:{round(self.percentage_of_clustered_molecules*100, 2)}%, t={self.time*10}ms')
@@ -220,13 +220,12 @@ class Experiment():
 
     for cluster in clusters_to_remove:
       self.clusters.remove(cluster)
+      cluster.exist = False
 
     for particle in self.particles_without_cluster:
       particle.move()
 
     new_particles_without_cluster = []
-
-    self.scan_for_new_clusters()
 
     for particle in self.particles_without_cluster + particles_that_dont_belong_no_more_to_cluster:
         cluster_assigned = False
@@ -240,6 +239,13 @@ class Experiment():
           new_particles_without_cluster.append(particle)
 
     self.particles_without_cluster = new_particles_without_cluster
+
+    new_clusters = self.scan_for_new_clusters()
+
+    for cluster in new_clusters:
+        new_particles = [a_particle for a_particle in self.particles_without_cluster if cluster.is_inside(a_particle)]
+        for new_particle in new_particles:
+            cluster.add_particle(new_particle)
 
     self.scan_for_merging_clusters()
     self.scan_for_overlapping_clusters()
@@ -343,7 +349,9 @@ class Experiment():
 
   def scan_for_new_clusters(self):
     non_clustered_molecule_index = 0
-    non_clustered_molecules = [particle for particle in self.all_particles if particle.cluster == None]
+    non_clustered_molecules = [particle for particle in self.all_particles if particle.cluster is None and not particle.came_from_existent_cluster()]
+
+    new_clusters = []
 
     candidate_new_cluster = Cluster(
         np.random.uniform(self.radio_range[0], self.radio_range[1]),
@@ -427,6 +435,7 @@ class Experiment():
           non_clustered_molecules.remove(new_clustered_particle)
 
         self.clusters.append(candidate_new_cluster)
+        new_clusters.append(candidate_new_cluster)
         non_clustered_molecule_index = 0
 
         candidate_new_cluster = Cluster(
@@ -443,6 +452,8 @@ class Experiment():
 
       else:
         non_clustered_molecule_index += 1
+
+    return new_clusters
 
   @property
   def current_time(self):
