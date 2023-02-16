@@ -41,5 +41,5 @@ while True:
     for i in range(0, 1000):
         an_experiment.move()
     
-    an_experiment.build_smlm_dataset_as_dataframe().to_csv(f"generated_datasets/smlm_dataset_{number}.csv", index=False)
+    an_experiment.build_smlm_dataset_as_dataframe().to_csv(f"./smlm_dataset_{number}.csv", index=False)
     number += 1
