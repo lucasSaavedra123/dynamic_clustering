@@ -8,7 +8,7 @@ from scipy.stats import skewnorm
 
 from Cluster import Cluster
 from Particle import Particle
-
+from CONSTANTS import *
 from utils import custom_norm
 
 def custom_mean(vector):
@@ -311,19 +311,16 @@ class Experiment():
     for particle in self.all_particles:
       if particle.in_fov() and particle.blinking_battery != 0:
         self.smlm_dataset_rows.append({
-          'x': particle.position_at(-1)[0] + self.generate_noise(),
-          'y': particle.position_at(-1)[1] + self.generate_noise(),
-          't': self.time * self.frame_rate,
-          'frame': self.time,
-          'clusterized': int(particle.cluster != None),
-          'cluster': particle.cluster.id if particle.cluster != None else 0,
+          X_POSITION_COLUMN_NAME: particle.position_at(-1)[0] + self.generate_noise(),
+          Y_POSITION_COLUMN_NAME: particle.position_at(-1)[1] + self.generate_noise(),
+          TIME_COLUMN_NAME: self.time * self.frame_rate,
+          FRAME_COLUMN_NAME: self.time,
+          CLUSTERIZED_COLUMN_NAME: int(particle.cluster != None),
+          CLUSTER_ID_COLUMN_NAME: particle.cluster.id if particle.cluster != None else 0,
         })
 
   def build_smlm_dataset_as_dataframe(self):
-      data = []
-      for row in self.smlm_dataset_rows:
-          data.append(row)
-      return pd.DataFrame(data)
+      return pd.DataFrame(self.smlm_dataset_rows)
 
   def scan_for_overlapping_clusters(self):
     for cluster in self.clusters:
