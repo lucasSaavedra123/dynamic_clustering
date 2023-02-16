@@ -1,8 +1,15 @@
-from CONSTANTS import *
-
 from scipy.io import loadmat
 import pandas as pd
+
 from Trajectory import Trajectory
+
+X_POSITION_COLUMN_NAME='x'
+Y_POSITION_COLUMN_NAME='y'
+TIME_COLUMN_NAME='t'
+FRAME_COLUMN_NAME='frame'
+CLUSTER_ID_COLUMN_NAME='cluster_id'
+CLUSTERIZED_COLUMN_NAME='clusterized'
+
 mat_data = loadmat('./all_tracks_thunder_localizer.mat')
 # Orden en la struct [BTX|mAb] [CDx|Control|CDx-Chol]
 dataset = []
@@ -29,6 +36,7 @@ dataset.append({'label': 'mAb',
 FRAME_RATE = 10e-3
 
 for data in dataset:
+    print("Building dataset for:", data['label'], data['exp_cond'])
     trajectories = Trajectory.from_mat_dataset(data['tracks'], data['label'], data['exp_cond'])
 
     smlm_dataset_rows = []
