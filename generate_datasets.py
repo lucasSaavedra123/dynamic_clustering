@@ -3,6 +3,12 @@ import numpy as np
 from Experiment import Experiment
 from RetentionProbabilities import *
 
+"""
+THIS INCLUDES SIMULATION PARAMETERS DIFFERENT FROM ORIGINAL BECAUSE,
+FIRST, WE WANT TO FIGURE OUT HOW GNNs ARE IMPLEMENTED AND TO HAVE SOME
+DATASETS TO INITIATE IN THIS FIELD.
+"""
+
 number = 0
 
 while True:
@@ -27,7 +33,7 @@ while True:
         0.6,
         average_localizations_per_frame,
         10e-3, #frame_rate
-        7000,
+        1000,
         40/1000,
         10/1000,
         #number_of_initial_non_cluster_particles_range = [2000, 2000], #number_of_initial_non_cluster_particles_range
