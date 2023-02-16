@@ -6,7 +6,7 @@ from RetentionProbabilities import *
 number = 0
 
 while True:
-    average_localizations_per_frame = np.random.uniform(10, 40)
+    average_localizations_per_frame = np.random.uniform(10, 50)
 
     an_experiment = Experiment(
         10, #um
@@ -38,7 +38,7 @@ while True:
 
     an_experiment.summary()
 
-    for i in range(0, 1):
+    for i in range(0, 1000):
         an_experiment.move()
     
     an_experiment.build_smlm_dataset_as_dataframe().to_csv(f"generated_datasets/smlm_dataset_{number}.csv", index=False)
