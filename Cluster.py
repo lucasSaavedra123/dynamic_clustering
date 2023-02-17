@@ -12,12 +12,6 @@ class Cluster():
 
   @classmethod
   def merge_clusters(cls, cluster1, cluster2):
-    for particle in cluster1.particles:
-      particle.was_inside = cluster1.is_inside(particle)
-
-    for particle in cluster2.particles:
-      particle.was_inside = cluster2.is_inside(particle)
-
     if cluster1.is_inside_of_cluster(cluster2):
       new_position = cluster2.position_at(-1)
     elif cluster2.is_inside_of_cluster(cluster1):
@@ -93,15 +87,26 @@ class Cluster():
     self.radio = radio
     self.number_of_particles_leaving_cluster = 0
     self.positions = np.array([initial_position])
-    self.particles = initial_particles
+    self.particles = []
     self.experiment = experiment
     self.number_of_particles_going_out = 0
     self.eccentricity_maximum = eccentricity_maximum
     self.retention_probability_function = retention_probability_function() # We create an instance of it
     self.id = next(Cluster.id_obj)
     self.exist = True
-
+    self.lifetime = lifetime
+    self.centroid_diffusion_coefficient = centroid_diffusion_coefficient
+    self.cluster_moving_to = None
     bad_initial_shape = True
+
+    self.slower_than_particles = np.random.choice([False, True], 1, p=[0.5, 0.5])[0]
+
+    if self.slower_than_particles:
+      self.min_factor = 0.5
+      self.max_factor = 1
+    else:
+      self.min_factor = 1
+      self.max_factor = 2
 
     while bad_initial_shape:
       self.width = np.random.uniform(radio, self.experiment.radio_range[1]) * 2
@@ -113,29 +118,9 @@ class Cluster():
       else:
         bad_initial_shape = False
 
-    self.lifetime = lifetime
-
-    self.centroid_diffusion_coefficient = centroid_diffusion_coefficient
-    self.cluster_moving_to = None
-    self.slower_than_particles = np.random.choice([False, True], 1, p=[0.5, 0.5])[0]
-
-    if self.slower_than_particles:
-      self.min_factor = 0.5
-      self.max_factor = 1
-    else:
-      self.min_factor = 1
-      self.max_factor = 2
-
-    if self.particles != []:
-      for particle in self.particles:
-        factor = np.random.uniform(self.min_factor, self.max_factor)
-        particle.diffusion_coefficient = self.centroid_diffusion_coefficient/factor
-        particle.can_be_retained=np.random.choice([False, True], 1, p=[0.90, 0.10])[0]
-        particle.residence_time = Hypoexponential(self.experiment.residence_time_range).sample(1)[0]
-        particle.time_belonging_cluster = self.experiment.current_time
-        particle.was_inside = None
-        particle.cluster = self
-
+    if initial_particles != []:
+      for particle in initial_particles:
+        self.add_particle(particle)
     else:
       for _ in range(number_of_initial_particles):
         not_inside = True
@@ -144,20 +129,19 @@ class Cluster():
           angle = np.random.uniform(0, 2 * np.pi)
           radio = np.random.uniform(0, max(self.height/2, self.width/2))
           new_position = [initial_position[0] + np.cos(angle) * radio, initial_position[1] + np.sin(angle) * radio]
+          not_inside = not self.is_inside(position=new_position)
 
-          if self.is_inside(position=new_position):
-            not_inside = False
+        self.particles.append(self.generate_particle_for_cluster(new_position))
 
-        self.particles.append(
-            Particle(
-              new_position,
-              self.centroid_diffusion_coefficient / np.random.uniform(self.min_factor, self.max_factor),
-              experiment,
-              can_be_retained=np.random.choice([False, True], 1, p=[0.95, 0.05]),
-              cluster=self,
-              residence_time=Hypoexponential(self.experiment.residence_time_range).sample(1)[0]
-            )
-          )
+  def generate_particle_for_cluster(self, position):
+    return Particle(
+      position,
+      self.centroid_diffusion_coefficient / np.random.uniform(self.min_factor, self.max_factor),
+      self.experiment,
+      can_be_retained=np.random.choice([False, True], 1, p=[0.95, 0.05]),
+      cluster=self,
+      residence_time=Hypoexponential(self.experiment.residence_time_range).sample(1)[0]
+    )
 
   def probability_to_be_retained(self, particle):
     assert particle in self.particles
@@ -189,7 +173,9 @@ class Cluster():
       particle.move()
       if particle.cluster is None:
           particles_without_cluster.append(particle)
-          self.particles.remove(particle)
+
+    for particle in particles_without_cluster: 
+      self.particles.remove(particle)
 
     if self.experiment.save_memory:
       self.positions = np.array([[new_x, new_y]])

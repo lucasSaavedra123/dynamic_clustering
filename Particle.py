@@ -16,14 +16,12 @@ class Particle():
 
     self.previous_cluster = None
 
-    #Flagd and 'Blinking Battery'
+    #Flaged and 'Blinking Battery'
     self.locked = False
     self.going_out_from_cluster = False
     self.blinking_battery = 0
     self.time_belonging_cluster = experiment.current_time #This only has sense in particle belongs to a cluster
     self.residence_time = residence_time #This only has sense in particle belongs to a cluster
-
-    self.was_inside = None #Neccesary when clusters are merged
 
     self.direction = 1
 
@@ -47,27 +45,14 @@ class Particle():
     return self.positions[t, :]
 
   def _move_closer(self):
-    old_radio = self.cluster.distance_to_radio_from(self.position_at(-1))
-    retry = True
-    while retry:
-      displacement_x = self.generate_displacement('x')
-      displacement_y = self.generate_displacement('y')
-
-      self.new_x = self.direction * displacement_x + self.position_at(-1)[0]
-      self.new_y = self.direction * displacement_y + self.position_at(-1)[1]
-      new_radio = self.cluster.distance_to_radio_from(np.array([self.new_x, self.new_y]))
-
-      if new_radio > old_radio:
-        self.direction = -self.direction
-        self.new_x = self.direction * displacement_x + self.position_at(-1)[0]
-        self.new_y = self.direction * displacement_y + self.position_at(-1)[1]
-        new_radio = self.cluster.distance_to_radio_from(np.array([self.new_x, self.new_y]))
-        if not (new_radio > old_radio):
-          retry = False
-      else:
-        retry = False
+    condition = lambda old_radio, new_radio: new_radio > old_radio
+    self._move_under_condition(condition)
 
   def _move_further(self):
+    condition = lambda old_radio, new_radio: new_radio < old_radio
+    self._move_under_condition(condition)
+
+  def _move_under_condition(self, condition):
     old_radio = self.cluster.distance_to_radio_from(self.position_at(-1))
     retry = True
     while retry:
@@ -76,15 +61,13 @@ class Particle():
 
       self.new_x = self.direction * displacement_x + self.position_at(-1)[0]
       self.new_y = self.direction * displacement_y + self.position_at(-1)[1]
-
       new_radio = self.cluster.distance_to_radio_from(np.array([self.new_x, self.new_y]))
 
-      if new_radio < old_radio:
+      if condition(old_radio, new_radio):
         self.direction = -self.direction
         self.new_x = self.direction * displacement_x + self.position_at(-1)[0]
         self.new_y = self.direction * displacement_y + self.position_at(-1)[1]
-        new_radio = self.cluster.distance_to_radio_from(np.array([self.new_x, self.new_y]))
-        if not (new_radio < old_radio):
+        if not condition(old_radio, new_radio):
           retry = False
       else:
         retry = False
@@ -116,8 +99,9 @@ class Particle():
         self.previous_cluster = self.cluster
         self.cluster = None
 
-        if np.random.choice([False, True], 1, p=[0.50, 0.50])[0]:
-          self.locked = False
+        self.locked = np.random.choice([False, True], 1, p=[0.50, 0.50])[0]
+
+        if not self.locked:
           self.diffusion_coefficient = np.random.uniform(self.experiment.no_cluster_molecules_diffusion_coefficient_range[0], self.experiment.no_cluster_molecules_diffusion_coefficient_range[1])
 
   def _move_as_free(self):
