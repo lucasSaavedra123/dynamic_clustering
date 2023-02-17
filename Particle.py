@@ -108,7 +108,8 @@ class Particle():
         retry = False
   
   def _move_as_locked(self):
-    self.positions = np.append(self.positions, [[self.position_at(-1)[0], self.position_at(-1)[1]]], axis=0)
+    self.new_x = self.generate_displacement('x') * 0 + self.position_at(-1)[0]
+    self.new_y = self.generate_displacement('y') * 0 + self.position_at(-1)[1]
 
     if self.cluster is not None:
       if not self.cluster.is_inside(self):
@@ -155,13 +156,14 @@ class Particle():
       else:
         self._move_as_free()  
 
-      if self.experiment.save_memory:
-        self.positions = np.array([[self.new_x, self.new_y]])
-      else:
-        self.positions = np.append(self.positions, [[self.new_x, self.new_y]], axis=0)
+    if self.experiment.save_memory:
+      self.positions = np.array([[self.new_x, self.new_y]])
+    else:
+      self.positions = np.append(self.positions, [[self.new_x, self.new_y]], axis=0)
 
     self.displacement_generator_x.next_step()
     self.displacement_generator_y.next_step()
+
     self.blinking_battery = max(self.blinking_battery-1,0)
 
   @property

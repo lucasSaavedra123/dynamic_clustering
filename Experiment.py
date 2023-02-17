@@ -72,7 +72,7 @@ class Experiment():
     self.cluster_centroids_diffusion_coefficient_range = cluster_centroids_diffusion_coefficient_range
     self.no_cluster_molecules_diffusion_coefficient_range = no_cluster_molecules_diffusion_coefficient_range
     self.plots_with_blinking = plots_with_blinking
-    self.time = 0
+    self.time = 0 #This is the current frame
     self.first_recharge = True
     self.radio_range = radio_range
     self.save_memory = save_memory
@@ -160,6 +160,7 @@ class Experiment():
     
     self.all_particles += self.particles_without_cluster
 
+    self.__number_of_particles = len(self.all_particles)
     self.recharge_batteries()
     self.scan_for_merging_clusters()
     self.scan_for_overlapping_clusters()
@@ -218,6 +219,12 @@ class Experiment():
       if len(cluster.particles) == 0 or all([particle_in_cluster.locked for particle_in_cluster in cluster.particles]):
         clusters_to_remove.append(cluster)
 
+        for particle in cluster.particles:
+          particle.locked = np.random.choice([False, True])
+          particle.cluster = None
+          particle.diffusion_coefficient = np.random.uniform(self.no_cluster_molecules_diffusion_coefficient_range[0], self.no_cluster_molecules_diffusion_coefficient_range[1])
+          particles_that_dont_belong_no_more_to_cluster.append(particle)
+
     for cluster in clusters_to_remove:
       self.clusters.remove(cluster)
       cluster.exist = False
@@ -245,14 +252,17 @@ class Experiment():
     for cluster in new_clusters:
         new_particles = [a_particle for a_particle in self.particles_without_cluster if cluster.is_inside(a_particle)]
         for new_particle in new_particles:
+            self.particles_without_cluster.remove(new_particle)
             cluster.add_particle(new_particle)
+
+    assert self.__number_of_particles == sum([len(cluster.particles) for cluster in self.clusters]) + len(self.particles_without_cluster), "Particles dissapeared during simulation"
 
     self.scan_for_merging_clusters()
     self.scan_for_overlapping_clusters()
     self.update_percentage_of_clustered_molecules()
     self.recharge_batteries()
-    self.update_smlm_dataset()
     self.time += 1
+    self.update_smlm_dataset()
 
   def recharge_batteries(self):
     all_particles = [particle for particle in self.all_particles if particle.in_fov()]
@@ -313,7 +323,7 @@ class Experiment():
         self.smlm_dataset_rows.append({
           X_POSITION_COLUMN_NAME: particle.position_at(-1)[0] + self.generate_noise(),
           Y_POSITION_COLUMN_NAME: particle.position_at(-1)[1] + self.generate_noise(),
-          TIME_COLUMN_NAME: self.time * self.frame_rate,
+          TIME_COLUMN_NAME: self.current_time,
           FRAME_COLUMN_NAME: self.time,
           CLUSTERIZED_COLUMN_NAME: int(particle.cluster != None),
           CLUSTER_ID_COLUMN_NAME: particle.cluster.id if particle.cluster != None else 0,

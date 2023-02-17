@@ -185,15 +185,11 @@ class Cluster():
         new_y
       ]], axis=0)
 
-    self.change_cluster_shape()
-
     for particle in self.particles:
       particle.move()
       if particle.cluster is None:
           particles_without_cluster.append(particle)
-
-    for particle in particles_without_cluster:
-      self.particles.remove(particle)
+          self.particles.remove(particle)
 
     if self.experiment.save_memory:
       self.positions = np.array([[new_x, new_y]])
@@ -206,26 +202,6 @@ class Cluster():
 
   def position_at(self, t):
     return self.positions[t, :]
-
-  def change_cluster_shape(self):
-    """
-    valid_new_shape = False
-
-    while not valid_new_shape:
-      new_width = self.width + np.random.normal(0, 0.0001)
-      new_height = self.height + np.random.normal(0, 0.0001)
-      new_angle = self.angle + np.random.normal(0, 0.01)
-
-      if new_width < self.radio * 2 or new_height < self.radio * 2 or self.eccentricity > self.eccentricity_maximum:
-        valid_new_shape = False
-      else:
-        valid_new_shape = True
-
-    self.width = max(new_width, max(self.experiment.radio_range))
-    self.height = max(new_height, max(self.experiment.radio_range))
-    self.angle = new_angle
-    """
-    pass
 
   def measure_overlap_with(self, another_cluster):
     self_particles_that_are_in_another_cluster = len([particle for particle in self.particles if another_cluster.is_inside(particle=particle)])
