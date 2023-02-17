@@ -209,6 +209,7 @@ class Experiment():
       plt.show()
 
   def move(self):
+    self.time += 1
     assert self.time != self.maximum_frame, "The simulation has already finished (the limit is maximum_frames parameter)"
     particles_that_dont_belong_no_more_to_cluster = []
     clusters_to_remove = []
@@ -261,7 +262,6 @@ class Experiment():
     self.scan_for_overlapping_clusters()
     self.update_percentage_of_clustered_molecules()
     self.recharge_batteries()
-    self.time += 1
     self.update_smlm_dataset()
 
   def recharge_batteries(self):
