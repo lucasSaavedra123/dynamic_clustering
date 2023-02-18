@@ -33,19 +33,21 @@ while True:
         0.6,
         average_localizations_per_frame,
         10e-3, #frame_rate
-        1000,
+        7000,
         40/1000,
         10/1000,
         #number_of_initial_non_cluster_particles_range = [2000, 2000], #number_of_initial_non_cluster_particles_range
-        minimum_level_of_percentage_molecules_range = [0, 0.85],
+        minimum_level_of_percentage_molecules_range = [0, 1],
         plots_with_blinking = False,
         save_memory = True
     )
 
     an_experiment.summary()
+    an_experiment.save_plot(path=f"./images/{number+1}")
 
-    for i in range(0, 1000):
+    for i in range(0, 999):
         an_experiment.move()
+        an_experiment.save_plot(path=f"./images/{number+1}")
     
-    an_experiment.build_smlm_dataset_as_dataframe().to_csv(f"./smlm_dataset_{number}.csv", index=False)
+    an_experiment.build_smlm_dataset_as_dataframe().to_csv(f"./images/{number+1}/smlm_dataset.csv", index=False)
     number += 1
