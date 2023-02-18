@@ -5,6 +5,19 @@ from CONSTANTS import *
 
 from argparse import ArgumentParser
 
+def generate_colors_for_cluster_ids(max_cluster_id):
+    color_list = ['red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown', 'olive', 'cyan', 'black']
+    
+    id_to_color = {}
+    id_to_color = {0: 'grey'}
+
+    for cluster_id in range(1, max_cluster_id+1):
+        id_to_color[cluster_id] = color_list[cluster_id % len(color_list)]
+    
+    print(id_to_color)
+
+    return id_to_color
+
 parser = ArgumentParser()
 parser.add_argument("-f", "--file", dest="filename")
 parser.add_argument("-d", "--dimension", default='3d', dest="dimension")
@@ -20,14 +33,14 @@ projection = args.dimension
 with_clustering = args.with_clustering
 
 if with_clustering:
-    dataset[CLUSTERIZED_COLUMN_NAME] = dataset[CLUSTERIZED_COLUMN_NAME].map({0: 'grey', 1: 'red'})
+    dataset[CLUSTER_ID_COLUMN_NAME] = dataset[CLUSTER_ID_COLUMN_NAME].map(generate_colors_for_cluster_ids(max(dataset[CLUSTER_ID_COLUMN_NAME])))
 
 if projection == '3d':
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
     if with_clustering:
-        ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[TIME_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], c=dataset[CLUSTERIZED_COLUMN_NAME], s=1)
+        ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[TIME_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], c=dataset[CLUSTER_ID_COLUMN_NAME], s=1)
     else:
         ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[TIME_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], s=1)
 
@@ -42,7 +55,7 @@ if projection == '2d':
     ax = fig.add_subplot()
 
     if with_clustering:
-        ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], c=dataset[CLUSTERIZED_COLUMN_NAME], s=1)
+        ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], c=dataset[CLUSTER_ID_COLUMN_NAME], s=1)
     else:
         ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], s=1)
 
