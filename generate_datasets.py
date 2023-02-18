@@ -20,7 +20,7 @@ directory_path = os.path.join('./', args.directory)
 if not os.path.isdir(directory_path):
     os.mkdir(directory_path)
 
-number = len(os.listdir(directory_path))
+number = len([file for file in os.listdir(directory_path) if file.endswith('.txt')])
 
 while True:
     average_localizations_per_frame = np.random.uniform(10, 50)
