@@ -1,4 +1,5 @@
 from math import ceil
+import os
 
 import numpy as np
 import pandas as pd
@@ -10,6 +11,7 @@ from Cluster import Cluster
 from Particle import Particle
 from CONSTANTS import *
 from utils import custom_norm
+
 
 def custom_mean(vector):
 
@@ -446,9 +448,9 @@ class Experiment():
   def current_time(self):
     return self.time * self.frame_rate
 
-  def save_plot(self, path="./images", dpi=200):
+  def save_plot(self, path="./", dpi=200):
     self.plot(show=False)
-    plt.savefig(f"{path}/{str(self.time).zfill(10)}.jpg", dpi=dpi)
+    plt.savefig(os.path.join(path, f"{str(self.time).zfill(10)}.jpg"), dpi=dpi)
     plt.close()
 
   def summary(self):
@@ -458,3 +460,15 @@ class Experiment():
         print(f"{attribute}: {len(self.__dict__[attribute])}")
       else:
         print(f"{attribute}: {self.__dict__[attribute]}")
+
+  def save_summary(self, path="./"):
+    print(f"Saving attributes in {path}")
+    string_text = ""
+    for attribute in self.__dict__:
+      if attribute in ['smlm_dataset_rows', 'clusters', 'particles_without_cluster', 'all_particles']:
+        string_text += f"{attribute}: {len(self.__dict__[attribute])}\n"
+      else:
+        string_text += f"{attribute}: {self.__dict__[attribute]}\n"
+
+    with open(os.path.join(path, "specs.txt"), "w") as file:
+      file.write(string_text)

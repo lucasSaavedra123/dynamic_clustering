@@ -42,7 +42,7 @@ while True:
         save_memory = True
     )
 
-    an_experiment.summary()
+    an_experiment.save_summary(path=f"./images/{number+1}")
     an_experiment.save_plot(path=f"./images/{number+1}")
 
     for i in range(0, 999):
