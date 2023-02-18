@@ -45,6 +45,7 @@ class Experiment():
                 anomalous_exponent_range,
                 retention_probabilities_functions_for_each_cluster,
                 retention_probabilities,
+                blinking_consecutives_frames,
                 lifetime_range,
                 lifetime_skewness,
                 lifetime_mean,
@@ -62,6 +63,7 @@ class Experiment():
                 save_memory = True #It is not efficient to hold whole temporal information of the experiment.
                ):
 
+    self.blinking_consecutives_frames = blinking_consecutives_frames
     self.mean_localization_error = mean_localization_error
     self.std_localization_error = std_localization_error
     self.anomalous_exponent_range = anomalous_exponent_range
@@ -264,7 +266,7 @@ class Experiment():
       particles_that_will_blink = np.random.choice(all_particles, ceil(self.average_molecules_per_frame), replace=False)
 
       for particle in particles_that_will_blink:
-          particle.blinking_battery = np.random.randint(2, 6)
+          particle.blinking_battery = np.random.randint(self.blinking_consecutives_frames[0], self.blinking_consecutives_frames[1]+1)
 
       self.localizations_that_appear_until_now = 0
 
@@ -278,7 +280,7 @@ class Experiment():
         particles_that_will_blink = np.random.choice(number_of_particles_not_currently_blinking, x, replace=False)
 
         for particle in particles_that_will_blink:
-          particle.blinking_battery = np.random.randint(2, 6)      
+          particle.blinking_battery = np.random.randint(self.blinking_consecutives_frames[0], self.blinking_consecutives_frames[1]+1)
 
       self.localizations_that_appear_until_now += len([particle for particle in all_particles if particle.blinking_battery != 0])
 
