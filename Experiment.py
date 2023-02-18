@@ -55,6 +55,7 @@ class Experiment():
                 maximum_frame,
                 mean_localization_error,
                 std_localization_error,
+                max_number_of_no_clusterized_particles = float('inf'),
                 number_of_initial_non_cluster_particles_range = None,
                 minimum_level_of_percentage_molecules_range = None,
                 plots_with_blinking = False,
@@ -114,7 +115,7 @@ class Experiment():
       self.clusters.append(self.generate_cluster_for_experiment())
 
     if self.minimum_level_of_percentage_molecules is not None:
-      while self.percentage_of_clustered_molecules > self.minimum_level_of_percentage_molecules:
+      while self.percentage_of_clustered_molecules > self.minimum_level_of_percentage_molecules and len(self.particles_without_cluster) < max_number_of_no_clusterized_particles:
         self.particles_without_cluster.append(self.generate_non_clustered_particle_for_experiment())
     elif self.number_of_initial_non_cluster_particles_range is not None:
       number_of_initial_non_cluster_particles = int(np.random.uniform(self.number_of_initial_non_cluster_particles_range[0], self.number_of_initial_non_cluster_particles_range[1]+1))
