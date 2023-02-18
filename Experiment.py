@@ -461,6 +461,8 @@ class Experiment():
       else:
         print(f"{attribute}: {self.__dict__[attribute]}")
 
+    print(f"percentage_of_clustered_molecules: {self.percentage_of_clustered_molecules}")
+
   def save_summary(self, path="./"):
     print(f"Saving attributes in {path}")
     string_text = ""
@@ -469,6 +471,8 @@ class Experiment():
         string_text += f"{attribute}: {len(self.__dict__[attribute])}\n"
       else:
         string_text += f"{attribute}: {self.__dict__[attribute]}\n"
+
+    string_text += f"percentage_of_clustered_molecules: {self.percentage_of_clustered_molecules}\n"
 
     with open(os.path.join(path, "specs.txt"), "w") as file:
       file.write(string_text)
