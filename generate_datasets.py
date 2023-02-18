@@ -3,13 +3,24 @@ import numpy as np
 from Experiment import Experiment
 from RetentionProbabilities import *
 
+from argparse import ArgumentParser
+import os
+
 """
 THIS INCLUDES SIMULATION PARAMETERS DIFFERENT FROM ORIGINAL BECAUSE,
 FIRST, WE WANT TO FIGURE OUT HOW GNNs ARE IMPLEMENTED AND TO HAVE SOME
 DATASETS TO INITIATE IN THIS FIELD.
 """
+parser = ArgumentParser()
+parser.add_argument("-d", "--directory", dest="directory", default="./datasets")
+args = parser.parse_args()
 
-number = 0
+directory_path = os.path.join('./', args.directory)
+
+if not os.path.isdir(directory_path):
+    os.mkdir(directory_path)
+
+number = len(os.listdir(directory_path))
 
 while True:
     average_localizations_per_frame = np.random.uniform(10, 50)
@@ -25,8 +36,8 @@ while True:
         [0.358, 0.025],
         [0.1, 1.9],
         [RetentionProbabilityWithDiscreteFunction, RetentionProbabilityWithCuadraticFunction, RetentionProbabilityWithLinearFunction],
-        [2, 5],
         [0.01, 0.5],
+        [2, 5],
         [25, 7000],
         3,
         500,
@@ -43,11 +54,11 @@ while True:
         save_memory = True
     )
 
-    an_experiment.save_summary(path=f"./images/{number+1}")
+    an_experiment.save_summary(path=os.path.join(directory_path, f"{number}_specs.txt"))
 
     for i in range(0, 999):
         print(number, i)
         an_experiment.move()
-    
-    an_experiment.build_smlm_dataset_as_dataframe().to_csv(f"./images/{number+1}/smlm_dataset.csv", index=False)
+
+    an_experiment.build_smlm_dataset_as_dataframe().to_csv(os.path.join(directory_path, f"{number}_smlm_dataset.txt"), index=False)
     number += 1

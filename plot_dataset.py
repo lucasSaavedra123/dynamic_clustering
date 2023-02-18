@@ -3,15 +3,24 @@ import matplotlib.pyplot as plt
 
 from CONSTANTS import *
 
-dataset = pd.read_csv('smlm_dataset_4.csv')
+from argparse import ArgumentParser
+
+parser = ArgumentParser()
+parser.add_argument("-f", "--file", dest="filename")
+parser.add_argument("-d", "--dimension", default='3d', dest="dimension")
+parser.add_argument("-c", "--with-clustering", default=False, dest="with_clustering")
+
+args = parser.parse_args()
+
+dataset = pd.read_csv(args.filename)
 
 print(f"Average: {len(dataset)/max(dataset[FRAME_COLUMN_NAME])}")
 
-projection = '2d'
-with_clustering = False
+projection = args.dimension
+with_clustering = args.with_clustering
 
 if with_clustering:
-    dataset[CLUSTERIZED_COLUMN_NAME] = dataset[CLUSTERIZED_COLUMN_NAME].map({0: 'black', 1: 'red'})
+    dataset[CLUSTERIZED_COLUMN_NAME] = dataset[CLUSTERIZED_COLUMN_NAME].map({0: 'grey', 1: 'red'})
 
 if projection == '3d':
     fig = plt.figure()
@@ -22,9 +31,9 @@ if projection == '3d':
     else:
         ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[TIME_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], s=1)
 
-    ax.set_xlabel('x')
-    ax.set_ylabel('t')
-    ax.set_zlabel('y')
+    ax.set_xlabel('x[um]')
+    ax.set_ylabel('t[s]')
+    ax.set_zlabel('y[um]')
 
     plt.show()
 
@@ -37,7 +46,7 @@ if projection == '2d':
     else:
         ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], s=1)
 
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
+    ax.set_xlabel('x[um]')
+    ax.set_ylabel('y[um]')
 
     plt.show()

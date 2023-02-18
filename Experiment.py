@@ -456,26 +456,24 @@ class Experiment():
     plt.savefig(os.path.join(path, f"{str(self.time).zfill(10)}.jpg"), dpi=dpi)
     plt.close()
 
-  def summary(self):
-    print("All attributes:")
-    for attribute in self.__dict__:
-      if attribute in ['smlm_dataset_rows', 'clusters', 'particles_without_cluster', 'all_particles']:
-        print(f"{attribute}: {len(self.__dict__[attribute])}")
-      else:
-        print(f"{attribute}: {self.__dict__[attribute]}")
-
-    print(f"percentage_of_clustered_molecules: {self.percentage_of_clustered_molecules}")
-
-  def save_summary(self, path="./"):
-    print(f"Saving attributes in {path}")
+  @property
+  def summary_as_string(self):
     string_text = ""
     for attribute in self.__dict__:
       if attribute in ['smlm_dataset_rows', 'clusters', 'particles_without_cluster', 'all_particles']:
         string_text += f"{attribute}: {len(self.__dict__[attribute])}\n"
       else:
-        string_text += f"{attribute}: {self.__dict__[attribute]}\n"
+        string_text += f"{attribute}: {self.__dict__[attribute]}\n"    
 
     string_text += f"percentage_of_clustered_molecules: {self.percentage_of_clustered_molecules}\n"
 
-    with open(os.path.join(path, "specs.txt"), "w") as file:
-      file.write(string_text)
+    return string_text
+
+  def summary(self):
+    print("All attributes:")
+    print(self.summary_as_string)
+
+  def save_summary(self, path="./specs.txt"):
+    print(f"Saving attributes in {path}")
+    with open(path, "w") as file:
+      file.write(self.summary_as_string)
