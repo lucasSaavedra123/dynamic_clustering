@@ -60,5 +60,5 @@ while True:
         print(number, i)
         an_experiment.move()
 
-    an_experiment.build_smlm_dataset_as_dataframe().to_csv(os.path.join(directory_path, f"{number}_smlm_dataset.txt"), index=False)
+    an_experiment.build_smlm_dataset_as_dataframe().to_csv(os.path.join(directory_path, f"{number}_smlm_dataset.csv"), index=False)
     number += 1
