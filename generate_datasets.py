@@ -20,7 +20,13 @@ directory_path = os.path.join('./', args.directory)
 if not os.path.isdir(directory_path):
     os.mkdir(directory_path)
 
-number = len([file for file in os.listdir(directory_path) if file.endswith('.txt')])
+total_txt_files = len([file for file in os.listdir(directory_path) if file.endswith('.txt')])
+total_csv_files = len([file for file in os.listdir(directory_path) if file.endswith('.csv')])
+
+if total_txt_files != total_csv_files:
+    number = total_txt_files - 1
+else:
+    number = total_txt_files
 
 while True:
     average_localizations_per_frame = np.random.uniform(10, 50)
