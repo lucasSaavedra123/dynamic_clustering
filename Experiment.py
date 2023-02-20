@@ -307,6 +307,7 @@ class Experiment():
   def update_smlm_dataset(self):
     for particle in [a_particle for a_particle in self.all_particles if a_particle.in_fov() and a_particle.blinking_battery != 0]:
       self.smlm_dataset_rows.append({
+        PARTICLE_ID_COLUMN_NAME: particle.id,
         X_POSITION_COLUMN_NAME: particle.position_at(-1)[0] + self.generate_noise(),
         Y_POSITION_COLUMN_NAME: particle.position_at(-1)[1] + self.generate_noise(),
         TIME_COLUMN_NAME: self.current_time,
