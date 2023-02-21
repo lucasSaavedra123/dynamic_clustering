@@ -127,3 +127,14 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# More Files
+*.gif
+*.jpg
+*.csv
+cache
+*.pyx
+ext/
+
+#Virtual Environment Files
+dynamic_clustering/
