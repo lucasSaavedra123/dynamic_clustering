@@ -3,7 +3,7 @@
 In this repository, simulation of Dynamic SMLM datasets can be found. In order to reproduce datasets, please see generate_datasets.py.
 ```generate_datasets.py```.
 
-We strongly recommend to run the simulations with cythonbuilder. Following our experience, simulations are faster. Run the following commands to cythonize the code:
+We strongly recommend to run the simulations with cythonbuilder. According to our experience, simulations are faster. Run the following commands to cythonize the code:
 
 ``` 
 mv Cluster.py Cluster.pyx
