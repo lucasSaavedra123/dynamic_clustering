@@ -45,11 +45,13 @@ for data in dataset:
     for trajectory in trajectories:
         for length_index in range(trajectory.length):
             smlm_dataset_rows.append({
-                PARTICLE_ID_COLUMN_NAME: -1
+                PARTICLE_ID_COLUMN_NAME: 0,
                 X_POSITION_COLUMN_NAME: trajectory.get_noisy_x()[length_index],
                 Y_POSITION_COLUMN_NAME: trajectory.get_noisy_y()[length_index],
                 TIME_COLUMN_NAME: trajectory.get_time()[length_index],
                 FRAME_COLUMN_NAME: int(trajectory.get_time()[length_index] / FRAME_RATE),
+                CLUSTERIZED_COLUMN_NAME: 0,
+                CLUSTER_ID_COLUMN_NAME: 0,
             })
 
     pd.DataFrame(smlm_dataset_rows).to_csv(f"{data['exp_cond']}_{data['label']}.csv")
