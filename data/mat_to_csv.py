@@ -9,6 +9,7 @@ TIME_COLUMN_NAME='t'
 FRAME_COLUMN_NAME='frame'
 CLUSTER_ID_COLUMN_NAME='cluster_id'
 CLUSTERIZED_COLUMN_NAME='clusterized'
+PARTICLE_ID_COLUMN_NAME='particle_id'
 
 mat_data = loadmat('./all_tracks_thunder_localizer.mat')
 # Orden en la struct [BTX|mAb] [CDx|Control|CDx-Chol]
@@ -44,6 +45,7 @@ for data in dataset:
     for trajectory in trajectories:
         for length_index in range(trajectory.length):
             smlm_dataset_rows.append({
+                PARTICLE_ID_COLUMN_NAME: -1
                 X_POSITION_COLUMN_NAME: trajectory.get_noisy_x()[length_index],
                 Y_POSITION_COLUMN_NAME: trajectory.get_noisy_y()[length_index],
                 TIME_COLUMN_NAME: trajectory.get_time()[length_index],
