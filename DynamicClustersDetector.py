@@ -54,8 +54,13 @@ class DynamicClusterDetector():
         smlm_dataframe = smlm_dataframe.drop(TIME_COLUMN_NAME, axis=1)
         smlm_dataframe = smlm_dataframe.drop(CLUSTER_ID_COLUMN_NAME, axis=1)
 
-        smlm_dataframe['set'] = set_number
+        # normalize centroids between 0 and 1
+        smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains("centroid")] = (
+            smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains("centroid")]
+            / np.array([self.width, self.height])
+        )
 
+        smlm_dataframe['set'] = set_number
         smlm_dataframe['solution'] = smlm_dataframe['solution'].astype(float)
 
         return smlm_dataframe
@@ -69,23 +74,13 @@ class DynamicClusterDetector():
         full_dataset = pd.DataFrame({})
 
         for csv_file_index, csv_file_name in enumerate(file_names):
-            nodesdf = self.get_dataset_from_path(os.path.join(path, csv_file_name), set_number=csv_file_index)
-
-            # normalize centroids between 0 and 1
-            nodesdf.loc[:, nodesdf.columns.str.contains("centroid")] = (
-                nodesdf.loc[:, nodesdf.columns.str.contains("centroid")]
-                / np.array([self.width, self.height])
-            )
-
-            full_dataset = full_dataset.append(nodesdf)
+            full_dataset = full_dataset.append(self.get_dataset_from_path(os.path.join(path, csv_file_name), set_number=csv_file_index))
 
         return full_dataset
 
-    def predict_smlm_dataset(self, smlm_dataset):
-        transformed_dataset = self.transform_smlm_dataset_to_magik_dataframe(smlm_dataset)
-
+    def predict(self, transformed_smlm_dataset):
         grapht = GraphExtractor(
-            nodesdf=transformed_dataset, properties=["centroid"], validation=True, **self.magik_variables.properties()
+            nodesdf=transformed_smlm_dataset, properties=["centroid"], validation=True, **self.magik_variables.properties()
         )
 
         v = [
@@ -94,6 +89,7 @@ class DynamicClusterDetector():
             np.expand_dims(grapht[0][2][:, 2:], 0),
             np.expand_dims(grapht[0][3], 0),
         ]
+
         output_node_f = self.magik_architecture(v).numpy()
         pred = (output_node_f > 0.5)[0, ...]
         g = grapht[1][1]
@@ -101,13 +97,12 @@ class DynamicClusterDetector():
         return pred, g, output_node_f, grapht
 
     def fit_with_datasets_from_path(self, path):
-        full_nodes_dataset = self.get_dataset_from_path(path)
+        full_nodes_dataset = self.get_datasets_from_path(path)
         self.build_network()
 
         generator = GraphGenerator(
             nodesdf=full_nodes_dataset,
             properties=["centroid"],
-            #parenthood=parenthood,
             min_data_size=511,
             max_data_size=512,
             batch_size=8,
