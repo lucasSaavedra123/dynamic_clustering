@@ -2,7 +2,6 @@ import os
 import logging
 logging.disable(logging.WARNING)
 
-
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -13,9 +12,11 @@ from CONSTANTS import *
 
 class DynamicClusterDetector():
     def __init__(self, height=10, width=10, radius=0.2, nofframes=10):
+        self._output_type = "nodes"
+
         self.magik_variables = dt.DummyFeature(
             radius=radius,
-            output_type="nodes",
+            output_type=self._output_type,
             nofframes=nofframes, # time window to associate nodes (in frames) 
         )
 
@@ -32,7 +33,7 @@ class DynamicClusterDetector():
             number_of_edge_features=1,              # Number of edge features in the graphs
             number_of_node_outputs=1,               # Number of predicted features
             node_output_activation="sigmoid",       # Activation function for the output layer
-            output_type="nodes",                    # Output type. Either "edges", "nodes", or "graph"
+            output_type=self._output_type,                    # Output type. Either "edges", "nodes", or "graph"
         )
     
         self.magik_architecture.compile(
@@ -62,6 +63,7 @@ class DynamicClusterDetector():
 
         smlm_dataframe['set'] = set_number
         smlm_dataframe['solution'] = smlm_dataframe['solution'].astype(float)
+        smlm_dataframe['label'] = smlm_dataframe['label'] - (min(smlm_dataframe['label']) - 1)
 
         return smlm_dataframe
 
@@ -100,12 +102,26 @@ class DynamicClusterDetector():
         full_nodes_dataset = self.get_datasets_from_path(path)
         self.build_network()
 
+        def GetFeature(full_graph, **kwargs):
+            return (
+              dt.Value(full_graph)
+              #>> dt.Lambda(
+              #    AugmentCentroids,
+              #    rotate=lambda: np.random.rand() * 2 * np.pi,
+              #    #translate=lambda: np.random.randn(2) * 0.05,
+              #    translate=lambda: np.random.randn(2) * 0,
+              #    flip_x=lambda: np.random.randint(2),
+              #    flip_y=lambda: np.random.randint(2),
+              #  )
+            )
+
         generator = GraphGenerator(
             nodesdf=full_nodes_dataset,
             properties=["centroid"],
-            min_data_size=511,
-            max_data_size=512,
-            batch_size=8,
+            feature_function=GetFeature,
+            min_data_size=5,
+            max_data_size=11,
+            batch_size=1,
             **self.magik_variables.properties()
         )
 
