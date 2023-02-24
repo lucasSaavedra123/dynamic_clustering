@@ -78,10 +78,13 @@ class DynamicClusterDetector():
 
         return full_dataset
 
-    def predict(self, transformed_smlm_dataset):
-        grapht = GraphExtractor(
+    def get_magik_graph_from_transformed_smlm_dataset(self, transformed_smlm_dataset):
+        return GraphExtractor(
             nodesdf=transformed_smlm_dataset, properties=["centroid"], validation=True, **self.magik_variables.properties()
         )
+
+    def predict(self, transformed_smlm_dataset):
+        grapht = self.get_magik_graph_from_transformed_smlm_dataset(transformed_smlm_dataset)
 
         v = [
             np.expand_dims(grapht[0][0][:, 1:], 0),
