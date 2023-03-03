@@ -11,12 +11,8 @@ def generate_colors_for_cluster_ids(max_cluster_id):
     id_to_color = {}
     id_to_color = {0: 'grey'}
 
-    print(max_cluster_id)
-
     for cluster_id in range(1, max_cluster_id+1):
         id_to_color[cluster_id] = color_list[cluster_id % len(color_list)]
-
-    print(id_to_color)
 
     return id_to_color
 
