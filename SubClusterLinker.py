@@ -10,9 +10,9 @@ from deeptrack.models.gnns.generators import GraphGenerator, GraphExtractor
 
 from CONSTANTS import *
 
-class DynamicClusterDetector():
+class SubClusterLinker():
     def __init__(self, height=10, width=10, radius=0.2, nofframes=10):
-        self._output_type = "nodes"
+        self._output_type = "edges"
 
         self.magik_variables = dt.DummyFeature(
             radius=radius,
@@ -31,11 +31,11 @@ class DynamicClusterDetector():
             base_layer_dimensions=(96, 96, 96),     # Latent dimension throughout the message passing layers
             number_of_node_features=2,              # Number of node features in the graphs
             number_of_edge_features=1,              # Number of edge features in the graphs
-            number_of_node_outputs=1,               # Number of predicted features
+            number_of_edge_outputs=1,               # Number of predicted features
             node_output_activation="sigmoid",       # Activation function for the output layer
             output_type=self._output_type,                    # Output type. Either "edges", "nodes", or "graph"
         )
-    
+
         self.magik_architecture.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
             loss = 'binary_crossentropy',
