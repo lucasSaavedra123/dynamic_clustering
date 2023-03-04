@@ -15,20 +15,25 @@ parser = ArgumentParser()
 parser.add_argument("-d", "--directory", dest="directory", default="./datasets")
 args = parser.parse_args()
 
+file_suffix = 'smlm_dataset'
 directory_path = os.path.join('./', args.directory)
 
-if not os.path.isdir(directory_path):
-    os.mkdir(directory_path)
+def next_dataset_number_generator():
+    global file_suffix, directory_path
 
-total_txt_files = len([file for file in os.listdir(directory_path) if file.endswith('.txt')])
-total_csv_files = len([file for file in os.listdir(directory_path) if file.endswith('.csv')])
+    if not os.path.isdir(directory_path):
+        os.mkdir(directory_path)
 
-if total_txt_files != total_csv_files:
-    number = total_txt_files - 1
-else:
-    number = total_txt_files
+    number = 0
 
-while True:
+    while True:
+        if not os.path.isfile(os.path.join(directory_path, f"{number}_{file_suffix}.csv")):
+            yield number
+        number += 1
+
+file_number_generator = next_dataset_number_generator()
+
+for file_number in file_number_generator:
     average_localizations_per_frame = np.random.uniform(10, 50)
 
     an_experiment = Experiment(
@@ -60,11 +65,10 @@ while True:
         save_memory = True
     )
 
-    an_experiment.save_summary(path=os.path.join(directory_path, f"{number}_specs.txt"))
+    an_experiment.save_summary(path=os.path.join(directory_path, f"{file_number}_{file_suffix}.txt"))
 
     for i in range(0, 999):
-        print(number, i)
+        print(file_number, i)
         an_experiment.move()
 
-    an_experiment.build_smlm_dataset_as_dataframe().to_csv(os.path.join(directory_path, f"{number}_smlm_dataset.csv"), index=False)
-    number += 1
+    an_experiment.build_smlm_dataset_as_dataframe().to_csv(os.path.join(directory_path, f"{file_number}_{file_suffix}.csv"), index=False)
