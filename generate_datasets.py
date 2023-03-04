@@ -65,7 +65,7 @@ for file_number in file_number_generator:
         save_memory = True
     )
 
-    an_experiment.save_summary(path=os.path.join(directory_path, f"{file_number}_{file_suffix}.txt"))
+    an_experiment.save_summary(path=os.path.join(directory_path, f"{file_number}_specs.txt"))
 
     for i in range(0, 999):
         print(file_number, i)
