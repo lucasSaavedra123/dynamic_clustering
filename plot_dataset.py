@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from CONSTANTS import *
 
 from argparse import ArgumentParser
+from argparse import BooleanOptionalAction
 
 def generate_colors_for_cluster_ids(max_cluster_id):
     color_list = ['blue', 'red', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown', 'olive', 'cyan', 'black', 'magenta', 'navy', 'lime', 'darkred']
@@ -19,11 +20,11 @@ def generate_colors_for_cluster_ids(max_cluster_id):
 parser = ArgumentParser()
 parser.add_argument("-f", "--file", dest="filename")
 parser.add_argument("-d", "--dimension", default='3d', dest="dimension")
-parser.add_argument("-c", "--with-clustering", default=False, dest="with_clustering")
-parser.add_argument("-s", "--save_plots", default=False, dest="save_plots")
-parser.add_argument("-r", "--filter", default=False, dest="filter")
-parser.add_argument("-b", "--binary_clustering", default=True, dest="binary_clustering")
-parser.add_argument("-p", "--predicted", default=False, dest="predicted")
+parser.add_argument("-c", "--with-clustering", default=False, dest="with_clustering", action=BooleanOptionalAction)
+parser.add_argument("-s", "--save_plots", default=False, dest="save_plots", action=BooleanOptionalAction)
+parser.add_argument("-r", "--filter", default=False, dest="filter", action=BooleanOptionalAction)
+parser.add_argument("-b", "--binary_clustering", default=False, dest="binary_clustering", action=BooleanOptionalAction)
+parser.add_argument("-p", "--predicted", default=False, dest="predicted", action=BooleanOptionalAction)
 
 args = parser.parse_args()
 
@@ -37,18 +38,31 @@ filter_flag = args.filter
 binary_clustering = args.binary_clustering
 predicted = args.predicted
 
+print("projection->", projection, "Type:", type(projection))
+print("with_clustering->", with_clustering, "Type:", type(with_clustering))
+print("filter_flag->", filter_flag, "Type:", type(filter_flag))
+print("binary_clustering->", binary_clustering, "Type:", type(binary_clustering))
+print("predicted->", predicted, "Type:", type(predicted))
+
+
 if with_clustering:
 
     if predicted and binary_clustering:
+        print("Se predice y es binario")
         column_to_pick = CLUSTERIZED_COLUMN_NAME + '_predicted'
-    elif predicted and not binary_clustering:
+    elif predicted and (not binary_clustering):
+        print("Se predice y no es binario")
         column_to_pick = CLUSTER_ID_COLUMN_NAME + '_predicted'
-    elif not predicted and binary_clustering:
+    elif (not predicted) and binary_clustering:
+        print("No Se predice y es binario")
         column_to_pick = CLUSTERIZED_COLUMN_NAME
-    elif not predicted and not binary_clustering:
+    elif (not predicted) and (not binary_clustering):
+        print("No Se predice y no es binario")
         column_to_pick = CLUSTER_ID_COLUMN_NAME
     else:
         raise Exception("Invalid combination of parameters")
+
+    print(column_to_pick)
 
     if binary_clustering:
         dataset[CLUSTER_ID_COLUMN_NAME] = dataset[column_to_pick].map(generate_colors_for_cluster_ids(max(dataset[column_to_pick])))
