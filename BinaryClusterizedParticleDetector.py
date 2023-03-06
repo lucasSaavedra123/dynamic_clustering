@@ -16,21 +16,30 @@ logging.disable(logging.WARNING)
 
 
 class BinaryClusterizedParticleDetector():
-    def __init__(self, height=10, width=10, radius=0.2, nofframes=10):
+    def __init__(self, height=10, width=10):
         self._output_type = "nodes"
-
-        self.magik_variables = dt.DummyFeature(
-            radius=radius,
-            output_type=self._output_type,
-            nofframes=nofframes,  # time window to associate nodes (in frames)
-        )
-
-        self.nofframes = nofframes
-        self.radius = radius
+        self.magik_architecture = None
+        self.hyperparameters = self.__class__.default_hyperparameters()
         self.height = height
         self.width = width
 
-        self.magik_architecture = None
+    @classmethod
+    def default_hyperparameters(cls):
+        return {
+            "learning_rate": 0.001,
+            "radius": 0.05,
+            "nofframes": 7,
+            "partition_size": 50
+        }
+
+    @classmethod
+    def analysis_hyperparameters(cls):
+        return {
+            "learning_rate": [0.1, 0.01, 0.001],
+            "radius": [0.01, 0.025, 0.05, 0.1, 0.25],
+            "nofframes": [3, 5, 7, 9, 11],
+            "partition_size": [25, 50, 75, 100]
+        }
 
     def build_network(self):
         self.magik_architecture = dt.models.gnns.MAGIK(
@@ -48,7 +57,7 @@ class BinaryClusterizedParticleDetector():
         )
 
         self.magik_architecture.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=self.hyperparameters['learning_rate']),
             loss='binary_crossentropy',
             metrics=['accuracy'],
         )
@@ -103,11 +112,10 @@ class BinaryClusterizedParticleDetector():
 
         return full_dataset.reset_index(drop=True)
 
-    def predict(self, magik_dataset, number_of_frames_per_step=None):
+    def predict(self, magik_dataset):
         magik_dataset = magik_dataset.copy()
 
-        if number_of_frames_per_step is None:
-            number_of_frames_per_step = max(magik_dataset['frame'])
+        number_of_frames_per_step = self.hyperparameters["partition_size"]
 
         for frame_index in range(0, max(magik_dataset['frame']), number_of_frames_per_step):
             aux_magik_dataset = magik_dataset[magik_dataset['frame'] < frame_index + number_of_frames_per_step]
@@ -152,9 +160,9 @@ class BinaryClusterizedParticleDetector():
 
             # Create subsets from the frame list, with
             # "nofframes" elements each
-            maxframe = range(0, df_set[FRAME_COLUMN_NAME].max() + 1 + self.nofframes)
+            maxframe = range(0, df_set[FRAME_COLUMN_NAME].max() + 1 + self.hyperparameters['nofframes'])
 
-            windows = mit.windowed(maxframe, n=self.nofframes, step=1)
+            windows = mit.windowed(maxframe, n=self.hyperparameters['nofframes'], step=1)
             windows = map(
                 lambda x: list(filter(partial(is_not, None), x)), windows
             )
@@ -164,7 +172,7 @@ class BinaryClusterizedParticleDetector():
 
             for window in windows:
                 # remove excess frames
-                window = [elem for elem in window if elem <= df_set["frame"].max()]
+                window = [elem for elem in window if elem <= df_set[FRAME_COLUMN_NAME].max()]
 
                 df_window = df_set[df_set[FRAME_COLUMN_NAME].isin(window)].copy()
                 df_window = df_window.merge(df_window, how='cross')
@@ -172,7 +180,7 @@ class BinaryClusterizedParticleDetector():
                 df_window['distance-x'] = df_window[f"{POSITION_COLUMN_NAME}-x_x"] - df_window[f"{POSITION_COLUMN_NAME}-x_y"]
                 df_window['distance-y'] = df_window[f"{POSITION_COLUMN_NAME}-y_x"] - df_window[f"{POSITION_COLUMN_NAME}-y_y"]
                 df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
-                df_window = df_window[df_window['distance'] < self.radius]
+                df_window = df_window[df_window['distance'] < self.hyperparameters['radius']]
 
                 edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
 
@@ -198,48 +206,19 @@ class BinaryClusterizedParticleDetector():
 
         nodesets = full_nodes_dataset[[DATASET_COLUMN_NAME]].to_numpy().astype(int)
         edgesets = edges_dataframe[[DATASET_COLUMN_NAME]].to_numpy().astype(int)
+        framesets = full_nodes_dataset[[FRAME_COLUMN_NAME]].to_numpy().astype(int)
 
         global_property = np.zeros(np.unique(full_nodes_dataset[DATASET_COLUMN_NAME]).shape[0])
             
         return (
             (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
             (nfsolution, efsolution, global_property),
-            (nodesets, edgesets)
+            (nodesets, edgesets, framesets)
         )
 
     def fit_with_datasets_from_path(self, path):
-        full_nodes_dataset = self.get_datasets_from_path(path)
         self.build_network()
-
-        a_full_graph = self.build_graph(full_nodes_dataset)
-
-        def CustomGetSubGraph(num_nodes):
-            def inner(data):
-                graph, labels = data
-
-                node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
-
-                edge_connects_removed_node = np.any(
-                    (graph[2] < node_start) | (graph[2] >= node_start + num_nodes),
-                    axis=-1,
-                )
-
-                node_features = graph[0][node_start : node_start + num_nodes]
-                edge_features = graph[1][~edge_connects_removed_node]
-                edge_connections = graph[2][~edge_connects_removed_node] - node_start
-                weights = graph[3][~edge_connects_removed_node]
-
-                node_labels = labels[0][node_start : node_start + num_nodes]
-                edge_labels = labels[1][~edge_connects_removed_node]
-                global_labels = labels[2]
-
-                return (node_features, edge_features, edge_connections, weights), (
-                    node_labels,
-                    edge_labels,
-                    global_labels,
-                )
-
-            return inner
+        train_full_graph = self.build_graph(self.get_datasets_from_path(os.path.join(path, 'train')))
 
         def CustomGetSubSet(randset):
             """
@@ -273,30 +252,66 @@ class BinaryClusterizedParticleDetector():
                 edge_sets[:,0] = 0
                 """
 
+                frame_sets = sets[2][nodeidxs]
+
                 return (node_features, edge_features, edge_connections, weights), (
                     node_labels,
                     edge_labels,
                     glob_labels,
-                )#, (node_sets, edge_sets)
+                ), (frame_sets) #, (node_sets, edge_sets, frame_sets)
+
+            return inner
+
+        def CustomGetSubGraph():
+            def inner(data):
+                graph, labels, framesets = data
+
+                framesets = framesets[:,0]
+                initial_frame = np.random.choice(np.unique(framesets))
+                final_frame = initial_frame + self.hyperparameters["partition_size"]
+
+                if final_frame > np.max(framesets):
+                    final_frame = np.max(framesets)
+                    initial_frame = final_frame - self.hyperparameters["partition_size"]
+
+                nodeidxs = np.where(np.logical_and(initial_frame <= framesets, framesets < final_frame))
+
+                """
+                node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
+
+                edge_connects_removed_node = np.any(
+                    (graph[2] < node_start) | (graph[2] >= node_start + num_nodes),
+                    axis=-1,
+                )
+                """
+
+                edge_connects_removed_node = np.any(~np.isin(graph[2], nodeidxs), axis=-1)
+
+                #node_features = graph[0][node_start : node_start + num_nodes]
+                node_features = graph[0][nodeidxs]
+                edge_features = graph[1][~edge_connects_removed_node]
+                #edge_connections = graph[2][~edge_connects_removed_node] - node_start
+                edge_connections = graph[2][~edge_connects_removed_node] - np.min(nodeidxs)
+                weights = graph[3][~edge_connects_removed_node]
+
+                #node_labels = labels[0][node_start : node_start + num_nodes]
+                node_labels = labels[0][nodeidxs]
+                edge_labels = labels[1][~edge_connects_removed_node]
+                global_labels = labels[2]
+
+                return (node_features, edge_features, edge_connections, weights), (
+                    node_labels,
+                    edge_labels,
+                    global_labels,
+                )
 
             return inner
 
         def CustomGetFeature(full_graph, **kwargs):
             return (
                 dt.Value(full_graph)
-                >> dt.Lambda(
-                    CustomGetSubSet,
-                    randset=lambda: np.random.randint(np.max(full_graph[-1][0][:, 0]) + 1),
-                )
-                >> dt.Lambda(
-                    CustomGetSubGraph,
-                    num_nodes=lambda min_num_nodes, max_num_nodes: np.random.randint(
-                        min_num_nodes, max_num_nodes
-                    ),
-                    #node_start=lambda num_nodes: np.random.randint(max(len(full_graph[0][0]) - num_nodes, 1)),
-                    min_num_nodes=700,
-                    max_num_nodes=1500,
-                )
+                >> dt.Lambda(CustomGetSubSet, randset=lambda: np.random.randint(np.max(full_graph[-1][0][:, 0]) + 1),)
+                >> dt.Lambda(CustomGetSubGraph)
                 >> dt.Lambda(
                     AugmentCentroids,
                     rotate=lambda: np.random.rand() * 2 * np.pi,
@@ -308,20 +323,23 @@ class BinaryClusterizedParticleDetector():
                 >> dt.Lambda(NodeDropout, dropout_rate=0.00)
             )
 
-
-        feature = CustomGetFeature(a_full_graph, **self.magik_variables.properties())
+        magik_variables = dt.DummyFeature(
+            radius=self.hyperparameters["radius"],
+            output_type=self._output_type,
+            nofframes=self.hyperparameters["nofframes"],  # time window to associate nodes (in frames)
+        )
 
         args = {
             "batch_function": lambda graph: graph[0],
             "label_function": lambda graph: graph[1],
             "min_data_size": 512,
             "max_data_size": 513,
-            "batch_size": 8,
+            "batch_size": 1,
             "use_multi_inputs": False,
-            **self.magik_variables.properties(),
+            **magik_variables.properties(),
         }
 
-        generator = ContinuousGraphGenerator(feature, **args)
+        generator = ContinuousGraphGenerator(CustomGetFeature(train_full_graph, **magik_variables.properties()), **args)
 
         with generator:
             self.magik_architecture.fit(generator, epochs=10)
