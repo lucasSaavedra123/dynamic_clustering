@@ -188,11 +188,11 @@ class BinaryClusterizedParticleDetector():
                     'index_1': [edge[0] for edge in edges],
                     'index_2': [edge[1] for edge in edges],
                     'distance': [value[0] for value in df_window[["distance"]].values.tolist()]
-                }))
+                }), ignore_index=True)
 
             new_edges_dataframe = new_edges_dataframe.drop_duplicates()
             new_edges_dataframe['set'] = setid
-            edges_dataframe = edges_dataframe.append(new_edges_dataframe)
+            edges_dataframe = edges_dataframe.append(new_edges_dataframe, ignore_index=True)
 
         edgefeatures = edges_dataframe[["distance"]].to_numpy()
         sparseadjmtx = edges_dataframe[["index_1", "index_2"]].to_numpy().astype(int)
@@ -209,7 +209,7 @@ class BinaryClusterizedParticleDetector():
         framesets = full_nodes_dataset[[FRAME_COLUMN_NAME]].to_numpy().astype(int)
 
         global_property = np.zeros(np.unique(full_nodes_dataset[DATASET_COLUMN_NAME]).shape[0])
-            
+
         return (
             (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
             (nfsolution, efsolution, global_property),
