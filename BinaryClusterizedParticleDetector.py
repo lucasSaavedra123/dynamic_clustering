@@ -115,10 +115,8 @@ class BinaryClusterizedParticleDetector():
     def predict(self, magik_dataset):
         magik_dataset = magik_dataset.copy()
 
-        number_of_frames_per_step = self.hyperparameters["partition_size"]
-
-        for frame_index in range(0, max(magik_dataset['frame']), number_of_frames_per_step):
-            aux_magik_dataset = magik_dataset[magik_dataset['frame'] < frame_index + number_of_frames_per_step]
+        for frame_index in range(0, max(magik_dataset['frame']), self.hyperparameters["partition_size"]):
+            aux_magik_dataset = magik_dataset[magik_dataset['frame'] < frame_index + self.hyperparameters["partition_size"]]
             aux_magik_dataset = aux_magik_dataset[frame_index <= aux_magik_dataset['frame']]
             aux_magik_dataset['frame'] = aux_magik_dataset['frame'] - frame_index
             original_index = aux_magik_dataset.index
@@ -332,8 +330,8 @@ class BinaryClusterizedParticleDetector():
         args = {
             "batch_function": lambda graph: graph[0],
             "label_function": lambda graph: graph[1],
-            "min_data_size": 512,
-            "max_data_size": 513,
+            "min_data_size": 127,
+            "max_data_size": 128,
             "batch_size": 1,
             "use_multi_inputs": False,
             **magik_variables.properties(),
