@@ -11,6 +11,9 @@ import more_itertools as mit
 import tqdm
 from operator import is_not
 from functools import partial
+from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 logging.disable(logging.WARNING)
 
@@ -341,3 +344,23 @@ class BinaryClusterizedParticleDetector():
 
         with generator:
             self.magik_architecture.fit(generator, epochs=10)
+
+    def plot_confusion_matrix(self, ground_truth, Y_predicted, normalized=True):
+        confusion_mat = confusion_matrix(y_true=ground_truth, y_pred=Y_predicted)
+
+        if normalized:
+            confusion_mat = confusion_mat.astype(
+                'float') / confusion_mat.sum(axis=1)[:, np.newaxis]
+
+        labels = ["Non-Clusterized", "Clusterized"]
+
+        confusion_matrix_dataframe = pd.DataFrame(data=confusion_mat, index=labels, columns=labels)
+        sns.set(font_scale=1.5)
+        color_map = sns.color_palette(palette="Blues", n_colors=7)
+        sns.heatmap(data=confusion_matrix_dataframe, annot=True, annot_kws={"size": 15}, cmap=color_map)
+
+        plt.title(f'Confusion Matrix')
+        plt.rcParams.update({'font.size': 15})
+        plt.ylabel("Ground truth", fontsize=15)
+        plt.xlabel("Predicted label", fontsize=15)
+        plt.show()
