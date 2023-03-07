@@ -38,31 +38,18 @@ filter_flag = args.filter
 binary_clustering = args.binary_clustering
 predicted = args.predicted
 
-print("projection->", projection, "Type:", type(projection))
-print("with_clustering->", with_clustering, "Type:", type(with_clustering))
-print("filter_flag->", filter_flag, "Type:", type(filter_flag))
-print("binary_clustering->", binary_clustering, "Type:", type(binary_clustering))
-print("predicted->", predicted, "Type:", type(predicted))
-
-
 if with_clustering:
 
     if predicted and binary_clustering:
-        print("Se predice y es binario")
         column_to_pick = CLUSTERIZED_COLUMN_NAME + '_predicted'
     elif predicted and (not binary_clustering):
-        print("Se predice y no es binario")
         column_to_pick = CLUSTER_ID_COLUMN_NAME + '_predicted'
     elif (not predicted) and binary_clustering:
-        print("No Se predice y es binario")
         column_to_pick = CLUSTERIZED_COLUMN_NAME
     elif (not predicted) and (not binary_clustering):
-        print("No Se predice y no es binario")
         column_to_pick = CLUSTER_ID_COLUMN_NAME
     else:
         raise Exception("Invalid combination of parameters")
-
-    print(column_to_pick)
 
     if binary_clustering:
         dataset[CLUSTER_ID_COLUMN_NAME] = dataset[column_to_pick].map(generate_colors_for_cluster_ids(max(dataset[column_to_pick])))
