@@ -32,7 +32,8 @@ class BinaryClusterizedParticleDetector():
             "learning_rate": 0.001,
             "radius": 0.05,
             "nofframes": 7,
-            "partition_size": 50
+            "partition_size": 50,
+            "epochs": 10,
         }
 
     @classmethod
@@ -343,7 +344,7 @@ class BinaryClusterizedParticleDetector():
         generator = ContinuousGraphGenerator(CustomGetFeature(train_full_graph, **magik_variables.properties()), **args)
 
         with generator:
-            self.magik_architecture.fit(generator, epochs=10)
+            self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"])
 
     def plot_confusion_matrix(self, ground_truth, Y_predicted, normalized=True):
         confusion_mat = confusion_matrix(y_true=ground_truth, y_pred=Y_predicted)
