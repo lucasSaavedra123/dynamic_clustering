@@ -59,6 +59,8 @@ for file_number in file_number_generator:
         7000,
         40/1000,
         10/1000,
+        with_clustering=True,
+        with_new_clusters=True,
         max_number_of_no_clusterized_particles= 10000,
         minimum_level_of_percentage_molecules_range = [0, 1],
         plots_with_blinking = False,

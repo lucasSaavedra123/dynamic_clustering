@@ -56,6 +56,8 @@ class Experiment():
                 maximum_frame,
                 mean_localization_error,
                 std_localization_error,
+                with_clustering = True,
+                with_new_clusters = True,
                 max_number_of_no_clusterized_particles = float('inf'),
                 number_of_initial_non_cluster_particles_range = None,
                 minimum_level_of_percentage_molecules_range = None,
@@ -63,6 +65,8 @@ class Experiment():
                 save_memory = True #It is not efficient to hold whole temporal information of the experiment.
                ):
 
+    self.with_clustering = with_clustering
+    self.with_new_clusters = with_new_clusters
     self.blinking_consecutives_frames = blinking_consecutives_frames
     self.mean_localization_error = mean_localization_error
     self.std_localization_error = std_localization_error
@@ -113,16 +117,22 @@ class Experiment():
     self.clusters = []
     self.particles_without_cluster = []
   
-    for _ in range(np.random.randint(number_of_clusters_range[0], number_of_clusters_range[1]+1)):
-      self.clusters.append(self.generate_cluster_for_experiment())
+    if self.with_clustering:
+      for _ in range(np.random.randint(number_of_clusters_range[0], number_of_clusters_range[1]+1)):
+        self.clusters.append(self.generate_cluster_for_experiment())
 
-    if self.minimum_level_of_percentage_molecules is not None:
-      while self.percentage_of_clustered_molecules > self.minimum_level_of_percentage_molecules and len(self.particles_without_cluster) < max_number_of_no_clusterized_particles:
-        self.particles_without_cluster.append(self.generate_non_clustered_particle_for_experiment())
-    elif self.number_of_initial_non_cluster_particles_range is not None:
-      number_of_initial_non_cluster_particles = int(np.random.uniform(self.number_of_initial_non_cluster_particles_range[0], self.number_of_initial_non_cluster_particles_range[1]+1))
-      for _ in range(number_of_initial_non_cluster_particles):
-        self.particles_without_cluster.append(self.generate_non_clustered_particle_for_experiment())
+      if self.minimum_level_of_percentage_molecules is not None:
+        while self.percentage_of_clustered_molecules > self.minimum_level_of_percentage_molecules and len(self.particles_without_cluster) < max_number_of_no_clusterized_particles:
+          self.particles_without_cluster.append(self.generate_non_clustered_particle_for_experiment())
+      elif self.number_of_initial_non_cluster_particles_range is not None:
+        number_of_initial_non_cluster_particles = int(np.random.uniform(self.number_of_initial_non_cluster_particles_range[0], self.number_of_initial_non_cluster_particles_range[1]+1))
+        for _ in range(number_of_initial_non_cluster_particles):
+          self.particles_without_cluster.append(self.generate_non_clustered_particle_for_experiment())
+    else:
+       if max_number_of_no_clusterized_particles == float('Inf'):
+        raise Exception('max_number_of_no_clusterized_particles cannot be infinite if with_clustering is False')
+       else:
+        self.particles_without_cluster = [self.generate_non_clustered_particle_for_experiment() for _ in range(max_number_of_no_clusterized_particles)]
 
     self.all_particles = []
 
@@ -243,7 +253,10 @@ class Experiment():
 
     self.particles_without_cluster = new_particles_without_cluster
 
-    new_clusters = self.scan_for_new_clusters()
+    if self.with_clustering and self.with_new_clusters:
+      new_clusters = self.scan_for_new_clusters()
+    else:
+      new_clusters = []
 
     for cluster in new_clusters:
         new_particles = [a_particle for a_particle in self.particles_without_cluster if cluster.is_inside(a_particle)]
