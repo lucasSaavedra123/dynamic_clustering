@@ -14,9 +14,9 @@ from functools import partial
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
+import pickle
 
 logging.disable(logging.WARNING)
-
 
 class BinaryClusterizedParticleDetector():
     def __init__(self, height=10, width=10):
@@ -30,10 +30,10 @@ class BinaryClusterizedParticleDetector():
     def default_hyperparameters(cls):
         return {
             "learning_rate": 0.001,
-            "radius": 0.05,
-            "nofframes": 7,
-            "partition_size": 50,
-            "epochs": 10,
+            "radius": 0.01,
+            "nofframes": 5,
+            "partition_size": 100,
+            "epochs": 5,
         }
 
     @classmethod
@@ -62,8 +62,8 @@ class BinaryClusterizedParticleDetector():
 
         self.magik_architecture.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=self.hyperparameters['learning_rate']),
-            loss='binary_crossentropy',
-            metrics=['accuracy'],
+            loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
+            metrics=[tf.keras.metrics.AUC()]
         )
 
         self.magik_architecture.summary()
@@ -116,7 +116,7 @@ class BinaryClusterizedParticleDetector():
 
         return full_dataset.reset_index(drop=True)
 
-    def predict(self, magik_dataset):
+    def predict(self, magik_dataset, threshold=0.5):
         magik_dataset = magik_dataset.copy()
 
         for frame_index in range(0, max(magik_dataset['frame']), self.hyperparameters["partition_size"]):
@@ -135,7 +135,7 @@ class BinaryClusterizedParticleDetector():
                 grapht[0][3].reshape(1, grapht[0][3].shape[0], grapht[0][3].shape[1]),
             ]
 
-            magik_dataset.loc[original_index,LABEL_COLUMN_NAME+"_predicted"] = (self.magik_architecture(v).numpy() > 0.5)[0, ...]
+            magik_dataset.loc[original_index,LABEL_COLUMN_NAME+"_predicted"] = (self.magik_architecture(v).numpy() > threshold)[0, ...]
 
         magik_dataset[LABEL_COLUMN_NAME+"_predicted"] = magik_dataset[LABEL_COLUMN_NAME+"_predicted"].astype(int)
 
@@ -143,7 +143,7 @@ class BinaryClusterizedParticleDetector():
             magik_dataset[LABEL_COLUMN_NAME] = magik_dataset[LABEL_COLUMN_NAME].astype(int)
 
         return magik_dataset
-            #return pred, g, output_node_f, grapht
+        #return pred, g, output_node_f, grapht
 
     def build_graph(self, full_nodes_dataset):
         edges_dataframe = pd.DataFrame({
@@ -219,9 +219,23 @@ class BinaryClusterizedParticleDetector():
         )
 
     def fit_with_datasets_from_path(self, path):
-        self.build_network()
-        train_full_graph = self.build_graph(self.get_datasets_from_path(os.path.join(path, 'train')))
 
+        """
+        !!!
+        THIS FILE PERSISTANCE IS TEMPORAL
+        !!!
+        """
+        if os.path.exists('tmp.tmp'):
+            fileObj = open('tmp.tmp', 'rb')
+            train_full_graph = pickle.load(fileObj)
+            fileObj.close()
+        else:
+            train_full_graph = self.build_graph(self.get_datasets_from_path(path))
+            fileObj = open('tmp.tmp', 'wb')
+            pickle.dump(train_full_graph, fileObj)
+            fileObj.close()
+
+        self.build_network()
         def CustomGetSubSet(randset):
             """
             Returns a function that takes a graph and returns a
@@ -266,6 +280,36 @@ class BinaryClusterizedParticleDetector():
 
         def CustomGetSubGraph():
             def inner(data):
+                graph, labels, _ = data
+
+                min_num_nodes = 700
+                max_num_nodes = 1500
+
+                num_nodes= np.random.randint(min_num_nodes, max_num_nodes)
+
+                node_start= np.random.randint(max(len(graph[0]) - num_nodes, 1))
+
+                edge_connects_removed_node = np.any((graph[2] < node_start) | (graph[2] >= node_start + num_nodes),axis=-1)
+
+                node_features = graph[0][node_start : node_start + num_nodes]
+                edge_features = graph[1][~edge_connects_removed_node]
+                edge_connections = graph[2][~edge_connects_removed_node] - node_start
+                weights = graph[3][~edge_connects_removed_node]
+
+                node_labels = labels[0][node_start : node_start + num_nodes]
+                edge_labels = labels[1][~edge_connects_removed_node]
+                global_labels = labels[2]
+
+                return (node_features, edge_features, edge_connections, weights), (
+                    node_labels,
+                    edge_labels,
+                    global_labels,
+                )
+
+            return inner
+
+        def OldCustomGetSubGraph():
+            def inner(data):
                 graph, labels, framesets = data
 
                 framesets = framesets[:,0]
@@ -280,7 +324,6 @@ class BinaryClusterizedParticleDetector():
 
                 """
                 node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
-
                 edge_connects_removed_node = np.any(
                     (graph[2] < node_start) | (graph[2] >= node_start + num_nodes),
                     axis=-1,
@@ -334,9 +377,9 @@ class BinaryClusterizedParticleDetector():
         args = {
             "batch_function": lambda graph: graph[0],
             "label_function": lambda graph: graph[1],
-            "min_data_size": 127,
-            "max_data_size": 128,
-            "batch_size": 1,
+            "min_data_size": 512,
+            "max_data_size": 513,
+            "batch_size": 4,
             "use_multi_inputs": False,
             **magik_variables.properties(),
         }
@@ -350,8 +393,7 @@ class BinaryClusterizedParticleDetector():
         confusion_mat = confusion_matrix(y_true=ground_truth, y_pred=Y_predicted)
 
         if normalized:
-            confusion_mat = confusion_mat.astype(
-                'float') / confusion_mat.sum(axis=1)[:, np.newaxis]
+            confusion_mat = confusion_mat.astype('float') / confusion_mat.sum(axis=1)[:, np.newaxis]
 
         labels = ["Non-Clusterized", "Clusterized"]
 
