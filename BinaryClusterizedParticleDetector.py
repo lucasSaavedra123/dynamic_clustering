@@ -15,7 +15,7 @@ from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pickle
-
+from collections import Counter
 logging.disable(logging.WARNING)
 
 class BinaryClusterizedParticleDetector():
@@ -30,10 +30,11 @@ class BinaryClusterizedParticleDetector():
     def default_hyperparameters(cls):
         return {
             "learning_rate": 0.001,
-            "radius": 0.01,
-            "nofframes": 5,
+            "radius": 0.1,
+            "nofframes": 7,
             "partition_size": 100,
-            "epochs": 5,
+            "epochs": 25,
+            "batch_size": 1,
         }
 
     @classmethod
@@ -42,7 +43,8 @@ class BinaryClusterizedParticleDetector():
             "learning_rate": [0.1, 0.01, 0.001],
             "radius": [0.01, 0.025, 0.05, 0.1, 0.25],
             "nofframes": [3, 5, 7, 9, 11],
-            "partition_size": [25, 50, 75, 100]
+            "partition_size": [25, 50, 75, 100],
+            "batch_size": [1,2,4]
         }
 
     def build_network(self):
@@ -63,7 +65,8 @@ class BinaryClusterizedParticleDetector():
         self.magik_architecture.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=self.hyperparameters['learning_rate']),
             loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
-            metrics=[tf.keras.metrics.AUC()]
+            #loss="mse",
+            metrics=['accuracy', tf.keras.metrics.AUC()]
         )
 
         self.magik_architecture.summary()
@@ -116,7 +119,7 @@ class BinaryClusterizedParticleDetector():
 
         return full_dataset.reset_index(drop=True)
 
-    def predict(self, magik_dataset, threshold=0.5):
+    def predict(self, magik_dataset, threshold=0.75):
         magik_dataset = magik_dataset.copy()
 
         for frame_index in range(0, max(magik_dataset['frame']), self.hyperparameters["partition_size"]):
@@ -136,6 +139,7 @@ class BinaryClusterizedParticleDetector():
             ]
 
             magik_dataset.loc[original_index,LABEL_COLUMN_NAME+"_predicted"] = (self.magik_architecture(v).numpy() > threshold)[0, ...]
+            #magik_dataset.loc[original_index,LABEL_COLUMN_NAME+"_predicted"] = (self.magik_architecture(v).numpy())[0, ...]
 
         magik_dataset[LABEL_COLUMN_NAME+"_predicted"] = magik_dataset[LABEL_COLUMN_NAME+"_predicted"].astype(int)
 
@@ -145,7 +149,7 @@ class BinaryClusterizedParticleDetector():
         return magik_dataset
         #return pred, g, output_node_f, grapht
 
-    def build_graph(self, full_nodes_dataset):
+    def build_graph(self, full_nodes_dataset, verbose=True):
         edges_dataframe = pd.DataFrame({
             "distance": [],
             "index_1": [],
@@ -157,7 +161,13 @@ class BinaryClusterizedParticleDetector():
 
         #We iterate on all the datasets and we extract all the edges.
         sets = np.unique(full_nodes_dataset[DATASET_COLUMN_NAME])
-        for setid in tqdm.tqdm(sets):
+
+        if verbose:
+            iterator = tqdm.tqdm(sets)
+        else:
+            iterator = sets
+
+        for setid in iterator:
             df_set = full_nodes_dataset[full_nodes_dataset[DATASET_COLUMN_NAME] == setid].copy().reset_index()
 
             # Create subsets from the frame list, with
@@ -236,6 +246,7 @@ class BinaryClusterizedParticleDetector():
             fileObj.close()
 
         self.build_network()
+
         def CustomGetSubSet(randset):
             """
             Returns a function that takes a graph and returns a
@@ -282,12 +293,12 @@ class BinaryClusterizedParticleDetector():
             def inner(data):
                 graph, labels, _ = data
 
-                min_num_nodes = 700
+                min_num_nodes = 750
                 max_num_nodes = 1500
 
-                num_nodes= np.random.randint(min_num_nodes, max_num_nodes)
+                num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
 
-                node_start= np.random.randint(max(len(graph[0]) - num_nodes, 1))
+                node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
 
                 edge_connects_removed_node = np.any((graph[2] < node_start) | (graph[2] >= node_start + num_nodes),axis=-1)
 
@@ -308,6 +319,51 @@ class BinaryClusterizedParticleDetector():
 
             return inner
 
+        def CustomDatasetBalancing():
+            def inner(data):
+                graph, labels = data
+
+                number_of_clusterized_nodes = np.sum(np.array((labels[0][:, 0] == 1)) * 1)
+                number_of_non_clusterized_nodes = np.sum(np.array(labels[0][:, 0] == 0) * 1)
+
+                if number_of_clusterized_nodes > number_of_non_clusterized_nodes:
+                    nodeidxs = np.array(np.where(labels[0][:, 0] == 1)[0])
+
+                    number_of_nodes_to_select = number_of_non_clusterized_nodes
+
+                    nodes_to_select = np.random.choice(nodeidxs, size=number_of_nodes_to_select, replace=False)
+                    nodes_to_select = np.append(nodes_to_select, np.array(np.where(labels[0][:, 0] == 0)[0]))
+
+                    id_to_new_id = {}
+
+                    for index, value in enumerate(nodes_to_select):
+                        id_to_new_id[value] = index
+
+                    edge_connects_removed_node = np.any( ~np.isin(graph[2], nodes_to_select), axis=-1)
+
+                    node_features = graph[0][nodes_to_select]
+                    edge_features = graph[1][~edge_connects_removed_node]
+                    edge_connections = graph[2][~edge_connects_removed_node]
+
+                    edge_connections = np.vectorize(id_to_new_id.get)(edge_connections)
+
+                    weights = graph[3][~edge_connects_removed_node]
+
+                    node_labels = labels[0][nodes_to_select]
+                    edge_labels = labels[1][~edge_connects_removed_node]
+                    global_labels = labels[2]
+ 
+                    return (node_features, edge_features, edge_connections, weights), (
+                        node_labels,
+                        edge_labels,
+                        global_labels,
+                    )
+                else:
+                    return graph, labels
+
+            return inner
+
+        """
         def OldCustomGetSubGraph():
             def inner(data):
                 graph, labels, framesets = data
@@ -322,13 +378,11 @@ class BinaryClusterizedParticleDetector():
 
                 nodeidxs = np.where(np.logical_and(initial_frame <= framesets, framesets < final_frame))
 
-                """
-                node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
-                edge_connects_removed_node = np.any(
-                    (graph[2] < node_start) | (graph[2] >= node_start + num_nodes),
-                    axis=-1,
-                )
-                """
+                #node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
+                #edge_connects_removed_node = np.any(
+                #    (graph[2] < node_start) | (graph[2] >= node_start + num_nodes),
+                #    axis=-1,
+                #)
 
                 edge_connects_removed_node = np.any(~np.isin(graph[2], nodeidxs), axis=-1)
 
@@ -344,6 +398,8 @@ class BinaryClusterizedParticleDetector():
                 edge_labels = labels[1][~edge_connects_removed_node]
                 global_labels = labels[2]
 
+                #print(Counter(np.array(node_labels)))
+
                 return (node_features, edge_features, edge_connections, weights), (
                     node_labels,
                     edge_labels,
@@ -351,6 +407,7 @@ class BinaryClusterizedParticleDetector():
                 )
 
             return inner
+        """
 
         def CustomGetFeature(full_graph, **kwargs):
             return (
@@ -377,9 +434,9 @@ class BinaryClusterizedParticleDetector():
         args = {
             "batch_function": lambda graph: graph[0],
             "label_function": lambda graph: graph[1],
-            "min_data_size": 512,
-            "max_data_size": 513,
-            "batch_size": 4,
+            "min_data_size": 256,
+            "max_data_size": 257,
+            "batch_size": self.hyperparameters["batch_size"],
             "use_multi_inputs": False,
             **magik_variables.properties(),
         }

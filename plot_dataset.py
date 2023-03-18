@@ -12,7 +12,7 @@ def generate_colors_for_cluster_ids(max_cluster_id):
     id_to_color = {}
     id_to_color = {0: 'grey'}
 
-    for cluster_id in range(1, max_cluster_id+1):
+    for cluster_id in range(1, int(max_cluster_id)+1):
         id_to_color[cluster_id] = color_list[cluster_id % len(color_list)]
 
     return id_to_color
@@ -39,9 +39,6 @@ binary_clustering = args.binary_clustering
 predicted = args.predicted
 
 if with_clustering:
-    print(f"% of Clusterized Particles: {round(len(dataset[dataset[CLUSTERIZED_COLUMN_NAME] == 1])/len(dataset), 2) * 100}%")
-    print(f"% of Non Clusterized Particles: {round(len(dataset[dataset[CLUSTERIZED_COLUMN_NAME] == 0])/len(dataset), 2) * 100}%")
-
     if predicted and binary_clustering:
         column_to_pick = CLUSTERIZED_COLUMN_NAME + '_predicted'
     elif predicted and (not binary_clustering):
@@ -59,8 +56,10 @@ if with_clustering:
         dataset[CLUSTER_ID_COLUMN_NAME] = dataset[column_to_pick].map(generate_colors_for_cluster_ids(max(dataset[column_to_pick])))
 
 if filter_flag:
-    dataset = dataset[dataset[CLUSTERIZED_COLUMN_NAME] == 1]
-
+    if predicted:
+        dataset = dataset[dataset[CLUSTERIZED_COLUMN_NAME+ '_predicted'] == 1]
+    else:
+        dataset = dataset[dataset[CLUSTERIZED_COLUMN_NAME] == 1]
 if projection == '3d' or args.save_plots:
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
