@@ -1,12 +1,13 @@
 from CONSTANTS import *
-from deeptrack.models.gnns.augmentations import AugmentCentroids, NodeDropout
-from deeptrack.models.gnns.generators import GraphExtractor, ContinuousGraphGenerator
-import deeptrack as dt
-import tensorflow as tf
+# from deeptrack.models.gnns.augmentations import AugmentCentroids, NodeDropout
+# from deeptrack.models.gnns.generators import GraphExtractor, ContinuousGraphGenerator
+# import deeptrack as dt
+# import tensorflow as tf
 import numpy as np
 import pandas as pd
 import math
 import os
+from scipy.spatial import Delaunay
 import logging
 import more_itertools as mit
 import tqdm
@@ -68,8 +69,8 @@ class SubClusterLinking():
 
         self.magik_architecture.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=self.hyperparameters['learning_rate']),
-            loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
-            #loss="mse",
+            #loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
+            loss="mse",
             metrics=['accuracy', tf.keras.metrics.AUC(), tf.keras.metrics.TruePositives(), tf.keras.metrics.TrueNegatives(), tf.keras.metrics.FalsePositives(), tf.keras.metrics.FalseNegatives()]
         )
 
@@ -127,7 +128,7 @@ class SubClusterLinking():
         full_dataset = pd.DataFrame({})
         set_index = 0
 
-        for csv_file_name in file_names[0:5]:
+        for csv_file_name in file_names[0:4]:
             set_dataframe = self.get_dataset_from_path(os.path.join(path, csv_file_name), set_number=set_index)
 
             if not set_dataframe.empty:
@@ -140,8 +141,7 @@ class SubClusterLinking():
         magik_dataset = magik_dataset.copy()
         remaining_edges_keep = None
 
-        grapht = self.build_graph(magik_dataset, return_localization_centroid_to_dictionary=False)
-
+        grapht = self.build_graph(magik_dataset, for_predict=True)
 
         edges_features_batches = np.array_split(grapht[0][1], math.ceil(len(grapht[0][2])/self.hyperparameters['partition_size']))
         edges_adjacency_batches = np.array_split(grapht[0][2], math.ceil(len(grapht[0][2])/self.hyperparameters['partition_size']))
@@ -218,7 +218,7 @@ class SubClusterLinking():
 
         return magik_dataset
 
-    def build_graph(self, full_nodes_dataset, verbose=True, return_localization_centroid_to_dictionary=False):
+    def build_graph(self, full_nodes_dataset, verbose=True, for_predict=False):
         edges_dataframe = pd.DataFrame({
             "distance": [],
             "index_1": [],
@@ -226,11 +226,6 @@ class SubClusterLinking():
             "set": [],
             "same_cluster": []
         })
-
-        number_of_centroids = 0
-
-        full_nodes_dataset = full_nodes_dataset.copy()
-        full_centroids_dataset = pd.DataFrame({})
 
         #We iterate on all the datasets and we extract all the edges.
         sets = np.unique(full_nodes_dataset[DATASET_COLUMN_NAME])
@@ -240,116 +235,14 @@ class SubClusterLinking():
         else:
             iterator = sets
 
+        clusters_extracted_from_dbscan = pd.DataFrame({})
+
+        global_sub_cluster_id = 0
+
+        dbscan_result_by_subcluster_id = {}
+
         for setid in iterator:
-            #df_set = full_nodes_dataset[full_nodes_dataset[DATASET_COLUMN_NAME] == setid].copy()
-            df_set = full_nodes_dataset[full_nodes_dataset[DATASET_COLUMN_NAME] == setid].copy().reset_index()
-
-            """
-            new_graph = self.binary_clusterized_particle_detector.build_graph(df_set, verbose=False)
-
-            edges_adjacency = new_graph[0][2]
-
-            cluster_sets = []
-
-            for i in range(len(edges_adjacency)):
-                cluster_assigned = False
-                if len(cluster_sets) == 0:
-                    cluster_sets.append(set([edges_adjacency[i][0], edges_adjacency[i][1]]))
-                else:
-                    for index, s in enumerate(cluster_sets):
-                        if edges_adjacency[i][0] in s or edges_adjacency[i][1] in s:
-                            s.add(edges_adjacency[i][0])
-                            s.add(edges_adjacency[i][1])
-                            cluster_assigned = True
-                            break
-
-                    if not cluster_assigned:
-                        cluster_sets.append(set([edges_adjacency[i][0], edges_adjacency[i][1]]))
-
-            df_set['sub_cluster_id'] = 0
-
-            for index, a_set in enumerate(cluster_sets):
-                for value in a_set:
-                    df_set.loc[value, 'sub_cluster_id'] = index + 1
-
-            localization_to_centroid_dictionary = {}
-            localization_to_centroid_dictionary.update({index: df_set.loc[index, 'sub_cluster_id'] - min(df_set.index) for index in df_set.index})
-
-            df_set = df_set.groupby('sub_cluster_id', as_index=False).agg({
-                f"{POSITION_COLUMN_NAME}-x": 'mean',
-                f"{POSITION_COLUMN_NAME}-y": 'mean',
-                TIME_COLUMN_NAME: 'mean',
-                LABEL_COLUMN_NAME: lambda x: x.value_counts().index[0],
-                FRAME_COLUMN_NAME: 'mean'
-            })
-
-            df_set = df_set.reset_index(drop=True)
-            df_set['frame'] = df_set['frame'].astype(int)
-            df_set['index'] = df_set.index + number_of_centroids
-            df_set['set'] = setid
-            number_of_centroids += len(df_set)
-
-            full_centroids_dataset = full_centroids_dataset.append(df_set, ignore_index=True)
-
-            new_edges_dataframe = pd.DataFrame({'index_1': [], 'index_2': [],'distance': [], 'same_cluster': []})
-
-            new_edges_dataframe['set'] = setid
-
-            df_set = df_set.merge(df_set, how='cross')
-            df_set = df_set[df_set['index_x'] != df_set['index_y']]
-            df_set['distance-x'] = df_set[f"{POSITION_COLUMN_NAME}-x_x"] - df_set[f"{POSITION_COLUMN_NAME}-x_y"]
-            df_set['distance-y'] = df_set[f"{POSITION_COLUMN_NAME}-y_x"] - df_set[f"{POSITION_COLUMN_NAME}-y_y"]
-            df_set['distance'] = ((df_set['distance-x']**2) + (df_set['distance-y']**2))**(1/2)
-            df_set['same_cluster'] = (df_set[LABEL_COLUMN_NAME+"_x"] == df_set[LABEL_COLUMN_NAME+"_y"])
-            #df_set = df_set[df_set['distance'] < self.hyperparameters['radius']]
-
-            edges = [sorted(edge) for edge in df_set[["index_x", "index_y"]].values.tolist()]
-
-            new_edges_dataframe = new_edges_dataframe.append(pd.DataFrame({
-                'index_1': [edge[0] for edge in edges],
-                'index_2': [edge[1] for edge in edges],
-                'distance': [value[0] for value in df_set[["distance"]].values.tolist()],
-                'same_cluster': [value[0] for value in df_set[["same_cluster"]].values.tolist()],
-            }), ignore_index=True)
-            """
-
-            """
-            # Create subsets from the frame list, with
-            # "nofframes" elements each
-            maxframe = range(0, df_set[FRAME_COLUMN_NAME].max() + 1 + self.hyperparameters['nofframes'])
-
-            windows = mit.windowed(maxframe, n=self.hyperparameters['nofframes'], step=1)
-            windows = map(
-                lambda x: list(filter(partial(is_not, None), x)), windows
-            )
-            windows = list(windows)[:-2]
-
-            new_edges_dataframe = pd.DataFrame({'index_1': [], 'index_2': [],'distance': [], 'same_cluster': []})
-
-            for window in windows:
-                # remove excess frames
-                window = [elem for elem in window if elem <= df_set[FRAME_COLUMN_NAME].max()]
-                print(window)
-
-                df_window = df_set[df_set[FRAME_COLUMN_NAME].isin(window)].copy()
-                df_window = df_window.merge(df_window, how='cross')
-                df_window = df_window[df_window['index_x'] != df_window['index_y']]
-                df_window['distance-x'] = df_window[f"{POSITION_COLUMN_NAME}-x_x"] - df_window[f"{POSITION_COLUMN_NAME}-x_y"]
-                df_window['distance-y'] = df_window[f"{POSITION_COLUMN_NAME}-y_x"] - df_window[f"{POSITION_COLUMN_NAME}-y_y"]
-                df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
-                df_window['same_cluster'] = (df_window[LABEL_COLUMN_NAME+"_x"] == df_window[LABEL_COLUMN_NAME+"_y"])
-                df_window = df_window[df_window['distance'] < self.hyperparameters['radius']]
-
-                edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
-
-                new_edges_dataframe = new_edges_dataframe.append(pd.DataFrame({
-                    'index_1': [edge[0] for edge in edges],
-                    'index_2': [edge[1] for edge in edges],
-                    'distance': [value[0] for value in df_window[["distance"]].values.tolist()],
-                    'same_cluster': [value[0] for value in df_window[["same_cluster"]].values.tolist()],
-                }), ignore_index=True)
-            """
-
+            df_set = full_nodes_dataset[full_nodes_dataset[DATASET_COLUMN_NAME] == setid].copy().reset_index(drop=True)
             eps_values = np.linspace(0, 1, 100)
 
             results = {}
@@ -368,22 +261,52 @@ class SubClusterLinking():
 
             selected_eps_value = max(results, key=results.get)
             dbscan_result = dbscan_results[selected_eps_value]
-            print(selected_eps_value)
-
-            new_edges_dataframe = pd.DataFrame({'index_1': [], 'index_2': [],'distance': [], 'same_cluster': []})
 
             for sub_cluster_id in set(dbscan_result):
                 # remove excess frames
                 localizations_in_subcluster = np.where(dbscan_result == sub_cluster_id)
+                cluster_df = df_set.loc[localizations_in_subcluster].copy()
+                count = Counter(cluster_df['solution'])
+                if for_predict or (len(cluster_df['solution'].unique()) > 1 and (np.array([count[value] for value in count]) > 10).all()):
+                    cluster_df[DATASET_COLUMN_NAME] = global_sub_cluster_id
+                    dbscan_result_by_subcluster_id[global_sub_cluster_id] = selected_eps_value
+                    global_sub_cluster_id += 1
+                    clusters_extracted_from_dbscan = clusters_extracted_from_dbscan.append(cluster_df, ignore_index=(not for_predict))
 
-                df_window = df_set.loc[localizations_in_subcluster].copy()
+        clusters_extracted_from_dbscan = clusters_extracted_from_dbscan.reset_index()
+
+        #We iterate on all the datasets and we extract all the edges.
+        sets = np.unique(clusters_extracted_from_dbscan[DATASET_COLUMN_NAME])
+
+        if verbose:
+            iterator = tqdm.tqdm(sets)
+        else:
+            iterator = sets
+        
+        for setid in iterator:
+            new_edges_dataframe = pd.DataFrame({'index_1': [], 'index_2': [],'distance': [], 'same_cluster': []})
+
+            """
+            #maxframe = range(0, clusters_extracted_from_dbscan[FRAME_COLUMN_NAME].max() + 1 + self.hyperparameters['nofframes'])
+            maxframe = range(0, clusters_extracted_from_dbscan[clusters_extracted_from_dbscan['set'] == setid][FRAME_COLUMN_NAME].max() + 1 + self.hyperparameters['nofframes'])
+
+            windows = mit.windowed(maxframe, n=self.hyperparameters['nofframes'], step=1)
+            windows = map(lambda x: list(filter(partial(is_not, None), x)), windows)
+            windows = list(windows)[:-2]
+
+            for window in windows:
+                # remove excess frames
+                window = [elem for elem in window if elem <= clusters_extracted_from_dbscan[clusters_extracted_from_dbscan['set'] == setid][FRAME_COLUMN_NAME].max()]
+
+                df_window = clusters_extracted_from_dbscan[clusters_extracted_from_dbscan['set'] == setid].copy()
+                df_window = df_window[df_window[FRAME_COLUMN_NAME].isin(window)].copy()
                 df_window = df_window.merge(df_window, how='cross')
                 df_window = df_window[df_window['index_x'] != df_window['index_y']]
                 df_window['distance-x'] = df_window[f"{POSITION_COLUMN_NAME}-x_x"] - df_window[f"{POSITION_COLUMN_NAME}-x_y"]
                 df_window['distance-y'] = df_window[f"{POSITION_COLUMN_NAME}-y_x"] - df_window[f"{POSITION_COLUMN_NAME}-y_y"]
                 df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
                 df_window['same_cluster'] = (df_window[LABEL_COLUMN_NAME+"_x"] == df_window[LABEL_COLUMN_NAME+"_y"])
-                df_window = df_window[df_window['distance'] < selected_eps_value]
+                df_window = df_window[df_window['distance'] < dbscan_result_by_subcluster_id[setid]]
 
                 if not df_window['same_cluster'].all():
                     edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
@@ -394,6 +317,46 @@ class SubClusterLinking():
                         'distance': [value[0] for value in df_window[["distance"]].values.tolist()],
                         'same_cluster': [value[0] for value in df_window[["same_cluster"]].values.tolist()],
                     }), ignore_index=True)
+            """
+
+            df_window = clusters_extracted_from_dbscan[clusters_extracted_from_dbscan['set'] == setid].copy()
+            simplices = Delaunay(df_window[[f"{POSITION_COLUMN_NAME}-x", f"{POSITION_COLUMN_NAME}-y", "t"]].values).simplices
+
+            def less_first(a, b):
+                return [a,b] if a < b else [b,a]
+
+            list_of_edges = []
+
+            for triangle in simplices:
+                for e1, e2 in [[0,1],[1,2],[2,0]]: # for all edges of triangle
+                    list_of_edges.append(less_first(triangle[e1],triangle[e2])) # always lesser index first
+
+            new_index_to_old_index = {new_index:df_window.loc[new_index, 'index'] for new_index in df_window.index.values}
+            list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
+            list_of_edges = np.unique(list_of_edges, axis=0).tolist() # remove duplicates
+
+            def filter_fn(row):
+                return [row['index_x'], row['index_y']] in list_of_edges
+
+            df_window = df_window.merge(df_window, how='cross')
+            df_window = df_window[df_window['index_x'] != df_window['index_y']]
+            result = df_window.apply(filter_fn, axis=1)
+            df_window = df_window[result]
+            df_window['distance-x'] = df_window[f"{POSITION_COLUMN_NAME}-x_x"] - df_window[f"{POSITION_COLUMN_NAME}-x_y"]
+            df_window['distance-y'] = df_window[f"{POSITION_COLUMN_NAME}-y_x"] - df_window[f"{POSITION_COLUMN_NAME}-y_y"]
+            df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
+            df_window['same_cluster'] = (df_window[LABEL_COLUMN_NAME+"_x"] == df_window[LABEL_COLUMN_NAME+"_y"])
+            #df_window = df_window[df_window['distance'] < self.hyperparameters['radius']]
+
+            if for_predict or not df_window['same_cluster'].all():
+                edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
+
+                new_edges_dataframe = new_edges_dataframe.append(pd.DataFrame({
+                    'index_1': [edge[0] for edge in edges],
+                    'index_2': [edge[1] for edge in edges],
+                    'distance': [value[0] for value in df_window[["distance"]].values.tolist()],
+                    'same_cluster': [value[0] for value in df_window[["same_cluster"]].values.tolist()],
+                }), ignore_index=True)
 
             new_edges_dataframe = new_edges_dataframe.drop_duplicates()
             new_edges_dataframe['set'] = setid
@@ -401,8 +364,7 @@ class SubClusterLinking():
 
         edgefeatures = edges_dataframe[["distance"]].to_numpy()
         sparseadjmtx = edges_dataframe[["index_1", "index_2"]].to_numpy().astype(int)
-        #nodefeatures = full_centroids_dataset[[f"{POSITION_COLUMN_NAME}-x", f"{POSITION_COLUMN_NAME}-y", f"{TIME_COLUMN_NAME}"]].to_numpy()
-        nodefeatures = full_nodes_dataset[[f"{POSITION_COLUMN_NAME}-x", f"{POSITION_COLUMN_NAME}-y", f"{TIME_COLUMN_NAME}"]].to_numpy()
+        nodefeatures = clusters_extracted_from_dbscan[[f"{POSITION_COLUMN_NAME}-x", f"{POSITION_COLUMN_NAME}-y", TIME_COLUMN_NAME]].to_numpy()
 
         edgeweights = np.ones(sparseadjmtx.shape[0])
         edgeweights = np.stack((np.arange(0, edgeweights.shape[0]), edgeweights), axis=1)
@@ -410,27 +372,17 @@ class SubClusterLinking():
         nfsolution = np.zeros((len(nodefeatures), 1))
         efsolution = edges_dataframe[['same_cluster']].to_numpy().astype(int)
 
-        #nodesets = full_centroids_dataset[[DATASET_COLUMN_NAME]].to_numpy().astype(int)
-        nodesets = full_nodes_dataset[[DATASET_COLUMN_NAME]].to_numpy().astype(int)
+        nodesets = clusters_extracted_from_dbscan[[DATASET_COLUMN_NAME]].to_numpy().astype(int)
         edgesets = edges_dataframe[[DATASET_COLUMN_NAME]].to_numpy().astype(int)
-        #framesets = full_centroids_dataset[[FRAME_COLUMN_NAME]].to_numpy().astype(int)
-        framesets = full_nodes_dataset[[FRAME_COLUMN_NAME]].to_numpy().astype(int)
+        framesets = clusters_extracted_from_dbscan[[FRAME_COLUMN_NAME]].to_numpy().astype(int)
 
-        #global_property = np.zeros(np.unique(full_centroids_dataset[DATASET_COLUMN_NAME]).shape[0])
-        global_property = np.zeros(np.unique(full_nodes_dataset[DATASET_COLUMN_NAME]).shape[0])
+        global_property = np.zeros(np.unique(clusters_extracted_from_dbscan[DATASET_COLUMN_NAME]).shape[0])
 
-        if return_localization_centroid_to_dictionary:
-            return (
-                (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
-                (nfsolution, efsolution, global_property),
-                (nodesets, edgesets, framesets)
-            ), localization_to_centroid_dictionary
-        else:
-            return (
-                (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
-                (nfsolution, efsolution, global_property),
-                (nodesets, edgesets, framesets)
-            )
+        return (
+            (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
+            (nfsolution, efsolution, global_property),
+            (nodesets, edgesets, framesets)
+        )
 
     def fit_with_datasets_from_path(self, path):
         """
@@ -451,7 +403,7 @@ class SubClusterLinking():
 
         self.build_network()
 
-        def CustomGetSubSet(randset):
+        def CustomGetSubSet():
             """
             Returns a function that takes a graph and returns a
             random subset of the graph.
@@ -490,13 +442,13 @@ class SubClusterLinking():
 
                     frame_sets = sets[2][nodeidxs]
                     count = Counter(np.array(edge_labels)[:,0])
-                    retry = count[0] == 0 or count[1] == 0
+                    retry = len(count) == 0 or count[0] == 0 or count[1] == 0
 
                 return (node_features, edge_features, edge_connections, weights), (
                     node_labels,
                     edge_labels,
                     glob_labels,
-                ), (frame_sets) #, (node_sets, edge_sets, frame_sets)
+                )#, (frame_sets) #, (node_sets, edge_sets, frame_sets)
 
             return inner
 
@@ -505,7 +457,7 @@ class SubClusterLinking():
                 graph, labels, _ = data
 
                 min_num_nodes = 500
-                max_num_nodes = 1500
+                max_num_nodes = 5000
 
                 retry = True
 
@@ -527,14 +479,15 @@ class SubClusterLinking():
                     global_labels = labels[2]
 
                     count = Counter(np.array(edge_labels)[:,0])
-                    #print("Test:", count, "Keep:", Counter(np.array(labels[1])[:,0]))
-                    retry = len(np.array(edge_labels)) == 0 or count[0] == 0 or count[1] == 1
+                    retry = len(np.array(edge_labels)) == 0 or count[0] == 0 or count[1] == 0
 
                 return (node_features, edge_features, edge_connections, weights), (
                     node_labels,
                     edge_labels,
                     global_labels,
                 )
+            
+                return graph, labels
 
             return inner
 
@@ -542,36 +495,35 @@ class SubClusterLinking():
             def inner(data):
                 graph, labels = data
 
-                number_of_clusterized_nodes = np.sum(np.array((labels[0][:, 0] == 1)) * 1)
-                number_of_non_clusterized_nodes = np.sum(np.array(labels[0][:, 0] == 0) * 1)
+                number_of_same_cluster_edges = np.sum(np.array((labels[1][:, 0] == 1)) * 1)
+                number_of_non_same_cluster_edges = np.sum(np.array(labels[1][:, 0] == 0) * 1)
 
-                if number_of_clusterized_nodes > number_of_non_clusterized_nodes:
-                    nodeidxs = np.array(np.where(labels[0][:, 0] == 1)[0])
+                if number_of_same_cluster_edges > number_of_non_same_cluster_edges:
+                    edgeidxs = np.array(np.where(labels[1][:, 0] == 1)[0])
 
-                    number_of_nodes_to_select = number_of_non_clusterized_nodes
+                    number_of_edges_to_select = number_of_non_same_cluster_edges
 
-                    nodes_to_select = np.random.choice(nodeidxs, size=number_of_nodes_to_select, replace=False)
-                    nodes_to_select = np.append(nodes_to_select, np.array(np.where(labels[0][:, 0] == 0)[0]))
+                    edges_to_select = np.random.choice(edgeidxs, size=number_of_edges_to_select, replace=False)
+                    edges_to_select = np.append(edges_to_select, np.array(np.where(labels[1][:, 0] == 0)[0]))
+                    nodes_to_select = np.unique(np.array(graph[2][edges_to_select]))
 
                     id_to_new_id = {}
 
                     for index, value in enumerate(nodes_to_select):
                         id_to_new_id[value] = index
 
-                    edge_connects_removed_node = np.any( ~np.isin(graph[2], nodes_to_select), axis=-1)
-
                     node_features = graph[0][nodes_to_select]
-                    edge_features = graph[1][~edge_connects_removed_node]
-                    edge_connections = graph[2][~edge_connects_removed_node]
+                    edge_features = graph[1][edges_to_select]
+                    edge_connections = graph[2][edges_to_select]
 
                     edge_connections = np.vectorize(id_to_new_id.get)(edge_connections)
 
-                    weights = graph[3][~edge_connects_removed_node]
+                    weights = graph[3][edges_to_select]
 
                     node_labels = labels[0][nodes_to_select]
-                    edge_labels = labels[1][~edge_connects_removed_node]
+                    edge_labels = labels[1][edges_to_select]
                     global_labels = labels[2]
- 
+
                     return (node_features, edge_features, edge_connections, weights), (
                         node_labels,
                         edge_labels,
@@ -631,8 +583,9 @@ class SubClusterLinking():
         def CustomGetFeature(full_graph, **kwargs):
             return (
                 dt.Value(full_graph)
-                >> dt.Lambda(CustomGetSubSet, randset=lambda: np.random.randint(np.max(full_graph[-1][0][:, 0]) + 1),)
-                >> dt.Lambda(CustomGetSubGraph)
+                >> dt.Lambda(CustomGetSubSet)
+                #>> dt.Lambda(CustomGetSubGraph)
+                #>> dt.Lambda(CustomDatasetBalancing)
                 >> dt.Lambda(
                     AugmentCentroids,
                     rotate=lambda: np.random.rand() * 2 * np.pi,
