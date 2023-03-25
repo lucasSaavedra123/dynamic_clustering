@@ -1,8 +1,8 @@
 from CONSTANTS import *
-# from deeptrack.models.gnns.augmentations import AugmentCentroids, NodeDropout
-# from deeptrack.models.gnns.generators import GraphExtractor, ContinuousGraphGenerator
-# import deeptrack as dt
-# import tensorflow as tf
+from deeptrack.models.gnns.augmentations import AugmentCentroids, NodeDropout
+from deeptrack.models.gnns.generators import GraphExtractor, ContinuousGraphGenerator
+import deeptrack as dt
+import tensorflow as tf
 import numpy as np
 import pandas as pd
 import math
@@ -37,7 +37,7 @@ class SubClusterLinking():
             "learning_rate": 0.001,
             "radius": 0.05,
             "nofframes": 50, #20
-            "partition_size": 100000,
+            "partition_size": 50000,
             "epochs": 25,
             "batch_size": 4,
         }
@@ -141,20 +141,18 @@ class SubClusterLinking():
         magik_dataset = magik_dataset.copy()
         remaining_edges_keep = None
 
-        grapht = self.build_graph(magik_dataset, for_predict=True)
+        grapht, original_index = self.build_graph(magik_dataset, for_predict=True)
 
-        edges_features_batches = np.array_split(grapht[0][1], math.ceil(len(grapht[0][2])/self.hyperparameters['partition_size']))
-        edges_adjacency_batches = np.array_split(grapht[0][2], math.ceil(len(grapht[0][2])/self.hyperparameters['partition_size']))
-        edges_weights_batches = np.array_split(grapht[0][3], math.ceil(len(grapht[0][2])/self.hyperparameters['partition_size']))
+        for set_index in range(np.max(np.array(grapht[2][0])[:,0])):
+            nodeidxs = np.where(grapht[2][0][:, 0] == set_index)[0]
+            edgeidxs = np.where(grapht[2][1][:, 0] == set_index)[0]
 
-        """
-        for batch_index, edge_batch in enumerate(edges_adjacency_batches):
-            print(batch_index)
+            node_features = grapht[0][0][nodeidxs]
+            edge_features = grapht[0][1][edgeidxs]
+            edge_connections = grapht[0][2][edgeidxs]
+            edge_weights = grapht[0][3][edgeidxs]
 
-            nodes_in_batch = np.unique(edge_batch)
-            nodes_features_in_batch = grapht[0][0][nodes_in_batch]
-
-            mapping_old_node_id_to_new_node_id = {old_node_id: new_node_id for new_node_id, old_node_id in enumerate(nodes_in_batch)}
+            mapping_old_node_id_to_new_node_id = {old_node_id: new_node_id for new_node_id, old_node_id in enumerate(nodeidxs)}
 
             def map_node_id(node_id):
                 return mapping_old_node_id_to_new_node_id[node_id]
@@ -162,31 +160,29 @@ class SubClusterLinking():
             def inverse_map_node_id(node_id):
                 return {v: k for k, v in mapping_old_node_id_to_new_node_id.items()}[node_id]
 
-            edges_features_in_batch = edges_features_batches[batch_index]
-            edges_weights_in_batch = edges_weights_batches[batch_index]
-            edges_adjacency_in_batch = np.vectorize(map_node_id)(edge_batch)
+            edge_connections = np.vectorize(map_node_id)(edge_connections)
 
             v = [
-                nodes_features_in_batch.reshape(1, nodes_features_in_batch.shape[0], nodes_features_in_batch.shape[1]),
-                edges_features_in_batch.reshape(1, edges_features_in_batch.shape[0], edges_features_in_batch.shape[1]),
-                edges_adjacency_in_batch.reshape(1, edges_adjacency_in_batch.shape[0], edges_adjacency_in_batch.shape[1]),
-                edges_weights_in_batch.reshape(1, edges_weights_in_batch.shape[0], edges_weights_in_batch.shape[1]),
+                node_features.reshape(1, node_features.shape[0], node_features.shape[1]),
+                edge_features.reshape(1, edge_features.shape[0], edge_features.shape[1]),
+                edge_connections.reshape(1, edge_connections.shape[0], edge_connections.shape[1]),
+                edge_weights.reshape(1, edge_weights.shape[0], edge_weights.shape[1]),
             ]
 
             predictions = (self.magik_architecture(v).numpy() > threshold)[0, ...]
             edges_to_remove = np.where(predictions == 0)[0]
-            current_remaining_edges_keep = np.delete(edges_adjacency_in_batch, edges_to_remove, axis=0)
+            current_remaining_edges_keep = np.delete(edge_connections, edges_to_remove, axis=0)
             current_remaining_edges_keep = np.vectorize(inverse_map_node_id)(current_remaining_edges_keep)
 
             if remaining_edges_keep is None:
                 remaining_edges_keep = current_remaining_edges_keep
             else:
                 remaining_edges_keep = np.append(remaining_edges_keep, current_remaining_edges_keep, axis=0)
+
         """
-
-
         edges_to_remove = np.where(grapht[1][1] == 0)[0]
         remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
+        """
 
         cluster_sets = []
 
@@ -209,7 +205,7 @@ class SubClusterLinking():
 
         for index, a_set in enumerate(cluster_sets):
             for value in a_set:
-                magik_dataset.loc[value, LABEL_COLUMN_NAME+"_predicted"] = index + 1
+                magik_dataset.loc[original_index[value], LABEL_COLUMN_NAME+"_predicted"] = index + 1
         
         #magik_dataset[LABEL_COLUMN_NAME+"_predicted"] = magik_dataset[LABEL_COLUMN_NAME+"_predicted"].astype(int)
 
@@ -273,7 +269,9 @@ class SubClusterLinking():
                     global_sub_cluster_id += 1
                     clusters_extracted_from_dbscan = clusters_extracted_from_dbscan.append(cluster_df, ignore_index=(not for_predict))
 
-        clusters_extracted_from_dbscan = clusters_extracted_from_dbscan.reset_index()
+        original_index = clusters_extracted_from_dbscan.index.to_list()
+        clusters_extracted_from_dbscan = clusters_extracted_from_dbscan.reset_index(drop=True)
+        clusters_extracted_from_dbscan['index'] = clusters_extracted_from_dbscan.index
 
         #We iterate on all the datasets and we extract all the edges.
         sets = np.unique(clusters_extracted_from_dbscan[DATASET_COLUMN_NAME])
@@ -285,41 +283,7 @@ class SubClusterLinking():
         
         for setid in iterator:
             new_edges_dataframe = pd.DataFrame({'index_1': [], 'index_2': [],'distance': [], 'same_cluster': []})
-
-            """
-            #maxframe = range(0, clusters_extracted_from_dbscan[FRAME_COLUMN_NAME].max() + 1 + self.hyperparameters['nofframes'])
-            maxframe = range(0, clusters_extracted_from_dbscan[clusters_extracted_from_dbscan['set'] == setid][FRAME_COLUMN_NAME].max() + 1 + self.hyperparameters['nofframes'])
-
-            windows = mit.windowed(maxframe, n=self.hyperparameters['nofframes'], step=1)
-            windows = map(lambda x: list(filter(partial(is_not, None), x)), windows)
-            windows = list(windows)[:-2]
-
-            for window in windows:
-                # remove excess frames
-                window = [elem for elem in window if elem <= clusters_extracted_from_dbscan[clusters_extracted_from_dbscan['set'] == setid][FRAME_COLUMN_NAME].max()]
-
-                df_window = clusters_extracted_from_dbscan[clusters_extracted_from_dbscan['set'] == setid].copy()
-                df_window = df_window[df_window[FRAME_COLUMN_NAME].isin(window)].copy()
-                df_window = df_window.merge(df_window, how='cross')
-                df_window = df_window[df_window['index_x'] != df_window['index_y']]
-                df_window['distance-x'] = df_window[f"{POSITION_COLUMN_NAME}-x_x"] - df_window[f"{POSITION_COLUMN_NAME}-x_y"]
-                df_window['distance-y'] = df_window[f"{POSITION_COLUMN_NAME}-y_x"] - df_window[f"{POSITION_COLUMN_NAME}-y_y"]
-                df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
-                df_window['same_cluster'] = (df_window[LABEL_COLUMN_NAME+"_x"] == df_window[LABEL_COLUMN_NAME+"_y"])
-                df_window = df_window[df_window['distance'] < dbscan_result_by_subcluster_id[setid]]
-
-                if not df_window['same_cluster'].all():
-                    edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
-
-                    new_edges_dataframe = new_edges_dataframe.append(pd.DataFrame({
-                        'index_1': [edge[0] for edge in edges],
-                        'index_2': [edge[1] for edge in edges],
-                        'distance': [value[0] for value in df_window[["distance"]].values.tolist()],
-                        'same_cluster': [value[0] for value in df_window[["same_cluster"]].values.tolist()],
-                    }), ignore_index=True)
-            """
-
-            df_window = clusters_extracted_from_dbscan[clusters_extracted_from_dbscan['set'] == setid].copy()
+            df_window = clusters_extracted_from_dbscan[clusters_extracted_from_dbscan['set'] == setid].copy().reset_index(drop=True)
             simplices = Delaunay(df_window[[f"{POSITION_COLUMN_NAME}-x", f"{POSITION_COLUMN_NAME}-y", "t"]].values).simplices
 
             def less_first(a, b):
@@ -335,13 +299,47 @@ class SubClusterLinking():
             list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
             list_of_edges = np.unique(list_of_edges, axis=0).tolist() # remove duplicates
 
+            simplified_cross = pd.DataFrame({
+                f"{POSITION_COLUMN_NAME}-x_x": [],
+                f"{POSITION_COLUMN_NAME}-x_y": [],
+                f"{POSITION_COLUMN_NAME}-y_x": [],
+                f"{POSITION_COLUMN_NAME}-y_y": [],
+                'index_x': [],
+                'index_y': [],
+                LABEL_COLUMN_NAME+"_x": [],
+                LABEL_COLUMN_NAME+"_y": [],
+                TIME_COLUMN_NAME+"_x": [],
+                TIME_COLUMN_NAME+"_y": []
+            })
+
+            for edge in list_of_edges:
+                x_index = df_window["index"] == edge[0]
+                y_index = df_window["index"] == edge[1]
+
+                simplified_cross = simplified_cross.append(pd.DataFrame({
+                    f"{POSITION_COLUMN_NAME}-x_x": [df_window[x_index][f"{POSITION_COLUMN_NAME}-x"].values[0]],
+                    f"{POSITION_COLUMN_NAME}-x_y": [df_window[y_index][f"{POSITION_COLUMN_NAME}-x"].values[0]],
+                    f"{POSITION_COLUMN_NAME}-y_x": [df_window[x_index][f"{POSITION_COLUMN_NAME}-y"].values[0]],
+                    f"{POSITION_COLUMN_NAME}-y_y": [df_window[y_index][f"{POSITION_COLUMN_NAME}-y"].values[0]],
+                    'index_x': [edge[0]],
+                    'index_y': [edge[1]],
+                    LABEL_COLUMN_NAME+"_x": [df_window[x_index][f"{LABEL_COLUMN_NAME}"].values[0]],
+                    LABEL_COLUMN_NAME+"_y": [df_window[y_index][f"{LABEL_COLUMN_NAME}"].values[0]],
+                    TIME_COLUMN_NAME+"_x": [df_window[x_index][f"{TIME_COLUMN_NAME}"].values[0]],
+                    TIME_COLUMN_NAME+"_y": [df_window[y_index][f"{TIME_COLUMN_NAME}"].values[0]],
+                }), ignore_index=True)
+
+            df_window = simplified_cross.copy()
+
+            """
             def filter_fn(row):
                 return [row['index_x'], row['index_y']] in list_of_edges
 
             df_window = df_window.merge(df_window, how='cross')
-            df_window = df_window[df_window['index_x'] != df_window['index_y']]
-            result = df_window.apply(filter_fn, axis=1)
+            result = df_window.apply(filter_fn, axis=1, )
             df_window = df_window[result]
+            """
+            df_window = df_window[df_window['index_x'] != df_window['index_y']]
             df_window['distance-x'] = df_window[f"{POSITION_COLUMN_NAME}-x_x"] - df_window[f"{POSITION_COLUMN_NAME}-x_y"]
             df_window['distance-y'] = df_window[f"{POSITION_COLUMN_NAME}-y_x"] - df_window[f"{POSITION_COLUMN_NAME}-y_y"]
             df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
@@ -378,11 +376,18 @@ class SubClusterLinking():
 
         global_property = np.zeros(np.unique(clusters_extracted_from_dbscan[DATASET_COLUMN_NAME]).shape[0])
 
-        return (
-            (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
-            (nfsolution, efsolution, global_property),
-            (nodesets, edgesets, framesets)
-        )
+        if for_predict:
+            return (
+                (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
+                (nfsolution, efsolution, global_property),
+                (nodesets, edgesets, framesets)
+            ), original_index
+        else:
+            return (
+                (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
+                (nfsolution, efsolution, global_property),
+                (nodesets, edgesets, framesets)
+            )            
 
     def fit_with_datasets_from_path(self, path):
         """

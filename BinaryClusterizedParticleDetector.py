@@ -26,6 +26,9 @@ class BinaryClusterizedParticleDetector():
         self.height = height
         self.width = width
 
+        #This value will be picked at the end of training
+        self.threshold = 0.5
+
     @classmethod
     def default_hyperparameters(cls):
         return {
@@ -119,7 +122,7 @@ class BinaryClusterizedParticleDetector():
 
         return full_dataset.reset_index(drop=True)
 
-    def predict(self, magik_dataset, threshold=0.75):
+    def predict(self, magik_dataset):
         magik_dataset = magik_dataset.copy()
 
         for frame_index in range(0, max(magik_dataset['frame']), self.hyperparameters["partition_size"]):
@@ -138,7 +141,7 @@ class BinaryClusterizedParticleDetector():
                 grapht[0][3].reshape(1, grapht[0][3].shape[0], grapht[0][3].shape[1]),
             ]
 
-            magik_dataset.loc[original_index,LABEL_COLUMN_NAME+"_predicted"] = (self.magik_architecture(v).numpy() > threshold)[0, ...]
+            magik_dataset.loc[original_index,LABEL_COLUMN_NAME+"_predicted"] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...]
             #magik_dataset.loc[original_index,LABEL_COLUMN_NAME+"_predicted"] = (self.magik_architecture(v).numpy())[0, ...]
 
         magik_dataset[LABEL_COLUMN_NAME+"_predicted"] = magik_dataset[LABEL_COLUMN_NAME+"_predicted"].astype(int)
