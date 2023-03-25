@@ -1,43 +1,35 @@
-from CONSTANTS import *
-from deeptrack.models.gnns.augmentations import AugmentCentroids, NodeDropout
-from deeptrack.models.gnns.generators import GraphExtractor, ContinuousGraphGenerator
-import deeptrack as dt
-import tensorflow as tf
-import numpy as np
-import pandas as pd
+from collections import Counter
 import os
-import logging
 import more_itertools as mit
 import tqdm
 from operator import is_not
 from functools import partial
+import pickle
+
+from deeptrack.models.gnns.augmentations import NodeDropout
+from deeptrack.models.gnns.generators import ContinuousGraphGenerator
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
-import pickle
-from collections import Counter
-logging.disable(logging.WARNING)
+import deeptrack as dt
+import tensorflow as tf
+import numpy as np
+import pandas as pd
+import ghostml
 
-class BinaryClusterizedParticleDetector():
-    def __init__(self, height=10, width=10):
-        self._output_type = "nodes"
-        self.magik_architecture = None
-        self.hyperparameters = self.__class__.default_hyperparameters()
-        self.height = height
-        self.width = width
+from CONSTANTS import *
 
-        #This value will be picked at the end of training
-        self.threshold = 0.5
 
+class LocalizationClassifier():
     @classmethod
     def default_hyperparameters(cls):
         return {
             "learning_rate": 0.001,
             "radius": 0.1,
             "nofframes": 7,
-            "partition_size": 100,
+            "partition_size": 1000,
             "epochs": 25,
-            "batch_size": 1,
+            "batch_size": 4,
         }
 
     @classmethod
@@ -46,22 +38,28 @@ class BinaryClusterizedParticleDetector():
             "learning_rate": [0.1, 0.01, 0.001],
             "radius": [0.01, 0.025, 0.05, 0.1, 0.25],
             "nofframes": [3, 5, 7, 9, 11],
-            "partition_size": [25, 50, 75, 100],
+            #"partition_size": [25, 50, 75, 100],
             "batch_size": [1,2,4]
         }
 
+    def __init__(self, height=10, width=10):
+        self._output_type = "nodes"
+
+        self.magik_architecture = None
+        self.threshold = 0.5
+
+        self.hyperparameters = self.__class__.default_hyperparameters()
+        self.height = height
+        self.width = width
+
     def build_network(self):
         self.magik_architecture = dt.models.gnns.MAGIK(
-            # number of features in each dense encoder layer
             dense_layer_dimensions=(64, 96,),
-            # Latent dimension throughout the message passing layers
             base_layer_dimensions=(96, 96, 96),
-            number_of_node_features=2,              # Number of node features in the graphs
-            number_of_edge_features=1,              # Number of edge features in the graphs
-            number_of_node_outputs=1,               # Number of predicted features
-            # Activation function for the output layer
+            number_of_node_features=len(self.node_features),
+            number_of_edge_features=len(self.edge_features),
+            number_of_node_outputs=1,
             node_output_activation="sigmoid",
-            # Output type. Either "edges", "nodes", or "graph"
             output_type=self._output_type,
         )
 
@@ -74,61 +72,56 @@ class BinaryClusterizedParticleDetector():
 
         self.magik_architecture.summary()
 
-    def transform_magik_dataframe_to_smlm_dataset(self, magik_dataframe):
-        # normalize centroids between 0 and 1
-        magik_dataframe.loc[:, magik_dataframe.columns.str.contains(POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(POSITION_COLUMN_NAME)] * np.array([self.width, self.height]))
-
-        magik_dataframe = magik_dataframe.rename(columns={
-            f"{POSITION_COLUMN_NAME}-x": X_POSITION_COLUMN_NAME,
-            f"{POSITION_COLUMN_NAME}-y": Y_POSITION_COLUMN_NAME,
-            LABEL_COLUMN_NAME: CLUSTERIZED_COLUMN_NAME,
-            LABEL_COLUMN_NAME+"_predicted": CLUSTERIZED_COLUMN_NAME+"_predicted",
-        })
-
-        magik_dataframe = magik_dataframe.drop(DATASET_COLUMN_NAME, axis=1)
-        return magik_dataframe
-
     def transform_smlm_dataset_to_magik_dataframe(self, smlm_dataframe, set_number=0):
         smlm_dataframe = smlm_dataframe.rename(columns={
-            X_POSITION_COLUMN_NAME: f"{POSITION_COLUMN_NAME}-x",
-            Y_POSITION_COLUMN_NAME: f"{POSITION_COLUMN_NAME}-y",
-            CLUSTERIZED_COLUMN_NAME: LABEL_COLUMN_NAME,
+            X_POSITION_COLUMN_NAME: MAGIK_X_POSITION_COLUMN_NAME,
+            Y_POSITION_COLUMN_NAME: MAGIK_Y_POSITION_COLUMN_NAME,
+            CLUSTERIZED_COLUMN_NAME: MAGIK_LABEL_COLUMN_NAME,
+            CLUSTERIZED_COLUMN_NAME+"_predicted": MAGIK_LABEL_COLUMN_NAME_PREDICTED
         })
 
-        if CLUSTER_ID_COLUMN_NAME in smlm_dataframe.columns:
-            smlm_dataframe = smlm_dataframe.drop(CLUSTER_ID_COLUMN_NAME, axis=1)
-        if PARTICLE_ID_COLUMN_NAME in smlm_dataframe.columns:
-            smlm_dataframe = smlm_dataframe.drop(PARTICLE_ID_COLUMN_NAME, axis=1)
-        if "Unnamed: 0" in smlm_dataframe.columns:
-            smlm_dataframe = smlm_dataframe.drop("Unnamed: 0", axis=1)
+        smlm_dataframe = smlm_dataframe.drop([CLUSTER_ID_COLUMN_NAME, PARTICLE_ID_COLUMN_NAME, "Unnamed: 0"], axis=1, errors="ignore")
+        smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] / np.array([self.width, self.height]))
 
-        # normalize centroids between 0 and 1
-        smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(POSITION_COLUMN_NAME)] = (smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(POSITION_COLUMN_NAME)] / np.array([self.width, self.height]))
-
-        smlm_dataframe[DATASET_COLUMN_NAME] = set_number
-        smlm_dataframe[LABEL_COLUMN_NAME] = smlm_dataframe[LABEL_COLUMN_NAME].astype(float)
+        smlm_dataframe[MAGIK_DATASET_COLUMN_NAME] = set_number
+        smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(int)
 
         return smlm_dataframe.reset_index(drop=True)
 
+    def transform_magik_dataframe_to_smlm_dataset(self, magik_dataframe):
+        magik_dataframe = magik_dataframe.rename(columns={
+            MAGIK_X_POSITION_COLUMN_NAME: X_POSITION_COLUMN_NAME,
+            MAGIK_Y_POSITION_COLUMN_NAME: Y_POSITION_COLUMN_NAME,
+            MAGIK_LABEL_COLUMN_NAME: CLUSTERIZED_COLUMN_NAME,
+            MAGIK_LABEL_COLUMN_NAME_PREDICTED: CLUSTERIZED_COLUMN_NAME+"_predicted",
+        })
+
+        magik_dataframe.loc[:, magik_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] * np.array([self.width, self.height]))
+        magik_dataframe = magik_dataframe.drop(MAGIK_DATASET_COLUMN_NAME, axis=1)
+
+        return magik_dataframe.reset_index(drop=True)
+  
     def get_dataset_from_path(self, path, set_number=0):
         return self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(path), set_number=set_number)
 
+    def get_dataset_file_paths_from(self, path):
+        return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv")]
+
     def get_datasets_from_path(self, path):
-        file_names = [file_name for file_name in os.listdir(path) if file_name.endswith(".csv")]
         full_dataset = pd.DataFrame({})
 
-        for csv_file_index, csv_file_name in enumerate(file_names):
-            full_dataset = full_dataset.append(self.get_dataset_from_path(os.path.join(path, csv_file_name), set_number=csv_file_index))
+        for csv_file_index, csv_file_path in enumerate(self.get_dataset_file_paths_from(path)):
+            full_dataset = full_dataset.append(self.get_dataset_from_path(csv_file_path, set_number=csv_file_index))
 
         return full_dataset.reset_index(drop=True)
 
-    def predict(self, magik_dataset):
+    def predict(self, magik_dataset, apply_threshold=True):
         magik_dataset = magik_dataset.copy()
 
-        for frame_index in range(0, max(magik_dataset['frame']), self.hyperparameters["partition_size"]):
-            aux_magik_dataset = magik_dataset[magik_dataset['frame'] < frame_index + self.hyperparameters["partition_size"]]
-            aux_magik_dataset = aux_magik_dataset[frame_index <= aux_magik_dataset['frame']]
-            aux_magik_dataset['frame'] = aux_magik_dataset['frame'] - frame_index
+        for frame_index in range(0, max(magik_dataset[FRAME_COLUMN_NAME]), self.hyperparameters["partition_size"]):
+            aux_magik_dataset = magik_dataset[magik_dataset[FRAME_COLUMN_NAME] < frame_index + self.hyperparameters["partition_size"]]
+            aux_magik_dataset = aux_magik_dataset[frame_index <= aux_magik_dataset[FRAME_COLUMN_NAME]]
+            aux_magik_dataset[FRAME_COLUMN_NAME] = aux_magik_dataset[FRAME_COLUMN_NAME] - frame_index
             original_index = aux_magik_dataset.index
             aux_magik_dataset = aux_magik_dataset.copy().reset_index(drop=True)
 
@@ -141,29 +134,29 @@ class BinaryClusterizedParticleDetector():
                 grapht[0][3].reshape(1, grapht[0][3].shape[0], grapht[0][3].shape[1]),
             ]
 
-            magik_dataset.loc[original_index,LABEL_COLUMN_NAME+"_predicted"] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...]
-            #magik_dataset.loc[original_index,LABEL_COLUMN_NAME+"_predicted"] = (self.magik_architecture(v).numpy())[0, ...]
+            if apply_threshold:
+                magik_dataset.loc[original_index,MAGIK_LABEL_COLUMN_NAME_PREDICTED] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...]
+            else:
+                magik_dataset.loc[original_index,MAGIK_LABEL_COLUMN_NAME_PREDICTED] = (self.magik_architecture(v).numpy())[0, ...]
 
-        magik_dataset[LABEL_COLUMN_NAME+"_predicted"] = magik_dataset[LABEL_COLUMN_NAME+"_predicted"].astype(int)
-
-        if LABEL_COLUMN_NAME in magik_dataset.columns:
-            magik_dataset[LABEL_COLUMN_NAME] = magik_dataset[LABEL_COLUMN_NAME].astype(int)
+        if apply_threshold:
+            magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int)
+        else:
+            magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(float)
 
         return magik_dataset
-        #return pred, g, output_node_f, grapht
 
     def build_graph(self, full_nodes_dataset, verbose=True):
         edges_dataframe = pd.DataFrame({
             "distance": [],
             "index_1": [],
             "index_2": [],
-            "set": [],
+            MAGIK_DATASET_COLUMN_NAME: [],
         })
 
         full_nodes_dataset = full_nodes_dataset.copy()
 
-        #We iterate on all the datasets and we extract all the edges.
-        sets = np.unique(full_nodes_dataset[DATASET_COLUMN_NAME])
+        sets = np.unique(full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME])
 
         if verbose:
             iterator = tqdm.tqdm(sets)
@@ -171,10 +164,8 @@ class BinaryClusterizedParticleDetector():
             iterator = sets
 
         for setid in iterator:
-            df_set = full_nodes_dataset[full_nodes_dataset[DATASET_COLUMN_NAME] == setid].copy().reset_index()
+            df_set = full_nodes_dataset[full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index()
 
-            # Create subsets from the frame list, with
-            # "nofframes" elements each
             maxframe = range(0, df_set[FRAME_COLUMN_NAME].max() + 1 + self.hyperparameters['nofframes'])
 
             windows = mit.windowed(maxframe, n=self.hyperparameters['nofframes'], step=1)
@@ -192,9 +183,10 @@ class BinaryClusterizedParticleDetector():
                 df_window = df_set[df_set[FRAME_COLUMN_NAME].isin(window)].copy()
                 df_window = df_window.merge(df_window, how='cross')
                 df_window = df_window[df_window['index_x'] != df_window['index_y']]
-                df_window['distance-x'] = df_window[f"{POSITION_COLUMN_NAME}-x_x"] - df_window[f"{POSITION_COLUMN_NAME}-x_y"]
-                df_window['distance-y'] = df_window[f"{POSITION_COLUMN_NAME}-y_x"] - df_window[f"{POSITION_COLUMN_NAME}-y_y"]
-                df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
+                #df_window['distance-x'] = df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}-x_y"]
+                #df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
+                #df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
+                df_window['distance'] = np.linalg.norm(df_window.loc[:, [f"{MAGIK_X_POSITION_COLUMN_NAME}_x", f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"]].values - df_window.loc[:, [f"{MAGIK_X_POSITION_COLUMN_NAME}_y", f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]].values, axis=1)
                 df_window = df_window[df_window['distance'] < self.hyperparameters['radius']]
 
                 edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
@@ -206,24 +198,24 @@ class BinaryClusterizedParticleDetector():
                 }), ignore_index=True)
 
             new_edges_dataframe = new_edges_dataframe.drop_duplicates()
-            new_edges_dataframe['set'] = setid
+            new_edges_dataframe[MAGIK_DATASET_COLUMN_NAME] = setid
             edges_dataframe = edges_dataframe.append(new_edges_dataframe, ignore_index=True)
 
-        edgefeatures = edges_dataframe[["distance"]].to_numpy()
+        edgefeatures = edges_dataframe[self.edge_features].to_numpy()
         sparseadjmtx = edges_dataframe[["index_1", "index_2"]].to_numpy().astype(int)
-        nodefeatures = full_nodes_dataset[[f"{POSITION_COLUMN_NAME}-x", f"{POSITION_COLUMN_NAME}-y"]].to_numpy()
+        nodefeatures = full_nodes_dataset[self.node_features].to_numpy()
 
         edgeweights = np.ones(sparseadjmtx.shape[0])
         edgeweights = np.stack((np.arange(0, edgeweights.shape[0]), edgeweights), axis=1)
 
-        nfsolution = full_nodes_dataset[[LABEL_COLUMN_NAME]].to_numpy()
+        nfsolution = full_nodes_dataset[[MAGIK_LABEL_COLUMN_NAME]].to_numpy()
         efsolution = np.zeros((len(edgefeatures), 1))
 
-        nodesets = full_nodes_dataset[[DATASET_COLUMN_NAME]].to_numpy().astype(int)
-        edgesets = edges_dataframe[[DATASET_COLUMN_NAME]].to_numpy().astype(int)
+        nodesets = full_nodes_dataset[[MAGIK_DATASET_COLUMN_NAME]].to_numpy().astype(int)
+        edgesets = edges_dataframe[[MAGIK_DATASET_COLUMN_NAME]].to_numpy().astype(int)
         framesets = full_nodes_dataset[[FRAME_COLUMN_NAME]].to_numpy().astype(int)
 
-        global_property = np.zeros(np.unique(full_nodes_dataset[DATASET_COLUMN_NAME]).shape[0])
+        global_property = np.zeros(np.unique(full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME]).shape[0])
 
         return (
             (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
@@ -231,42 +223,42 @@ class BinaryClusterizedParticleDetector():
             (nodesets, edgesets, framesets)
         )
 
-    def fit_with_datasets_from_path(self, path):
+    @property
+    def node_features(self):
+        return [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]
 
-        """
-        !!!
-        THIS FILE PERSISTANCE IS TEMPORAL
-        !!!
-        """
-        if os.path.exists('tmp.tmp'):
-            fileObj = open('tmp.tmp', 'rb')
+    @property
+    def edge_features(self):
+        return ["distance"]
+
+    def model_file_name(self, extension='tmp'):
+        return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.{extension}"
+
+    def fit_with_datasets_from_path(self, path):
+        if os.path.exists(self.model_file_name()):
+            fileObj = open(self.model_file_name(), 'rb')
             train_full_graph = pickle.load(fileObj)
             fileObj.close()
         else:
             train_full_graph = self.build_graph(self.get_datasets_from_path(path))
-            fileObj = open('tmp.tmp', 'wb')
+            fileObj = open(self.model_file_name(), 'wb')
             pickle.dump(train_full_graph, fileObj)
             fileObj.close()
 
         self.build_network()
 
-        def CustomGetSubSet(randset):
-            """
-            Returns a function that takes a graph and returns a
-            random subset of the graph.
-            """
-
+        def CustomGetSubSet():
             def inner(data):
                 graph, labels, sets = data
+
+                randset= np.random.randint(np.max(sets[0][:, 0]) + 1)
 
                 nodeidxs = np.where(sets[0][:, 0] == randset)[0]
                 edgeidxs = np.where(sets[1][:, 0] == randset)[0]
 
-                min_node = np.min(nodeidxs)
-
                 node_features = graph[0][nodeidxs]
                 edge_features = graph[1][edgeidxs]
-                edge_connections = graph[2][edgeidxs] - min_node
+                edge_connections = graph[2][edgeidxs] - np.min(nodeidxs)
 
                 weights = graph[3][edgeidxs]
 
@@ -274,13 +266,11 @@ class BinaryClusterizedParticleDetector():
                 edge_labels = labels[1][edgeidxs]
                 glob_labels = labels[2][randset]
 
-                """
-                node_sets = sets[0][nodeidxs]
-                edge_sets = sets[1][edgeidxs]
+                #node_sets = sets[0][nodeidxs]
+                #edge_sets = sets[1][edgeidxs]
 
-                node_sets[:,0] = 0
-                edge_sets[:,0] = 0
-                """
+                #node_sets[:,0] = 0
+                #edge_sets[:,0] = 0
 
                 frame_sets = sets[2][nodeidxs]
 
@@ -294,7 +284,7 @@ class BinaryClusterizedParticleDetector():
 
         def CustomGetSubGraph():
             def inner(data):
-                graph, labels, _ = data
+                graph, labels, sets = data
 
                 min_num_nodes = 750
                 max_num_nodes = 1500
@@ -332,9 +322,7 @@ class BinaryClusterizedParticleDetector():
                 if number_of_clusterized_nodes > number_of_non_clusterized_nodes:
                     nodeidxs = np.array(np.where(labels[0][:, 0] == 1)[0])
 
-                    number_of_nodes_to_select = number_of_non_clusterized_nodes
-
-                    nodes_to_select = np.random.choice(nodeidxs, size=number_of_nodes_to_select, replace=False)
+                    nodes_to_select = np.random.choice(nodeidxs, size=number_of_non_clusterized_nodes, replace=False)
                     nodes_to_select = np.append(nodes_to_select, np.array(np.where(labels[0][:, 0] == 0)[0]))
 
                     id_to_new_id = {}
@@ -366,62 +354,43 @@ class BinaryClusterizedParticleDetector():
 
             return inner
 
-        """
-        def OldCustomGetSubGraph():
+        def AugmentCentroids(rotate, flip_x, flip_y):
             def inner(data):
-                graph, labels, framesets = data
+                graph, labels = data
 
-                framesets = framesets[:,0]
-                initial_frame = np.random.choice(np.unique(framesets))
-                final_frame = initial_frame + self.hyperparameters["partition_size"]
+                centroids = graph[0][:, :2]
 
-                if final_frame > np.max(framesets):
-                    final_frame = np.max(framesets)
-                    initial_frame = final_frame - self.hyperparameters["partition_size"]
-
-                nodeidxs = np.where(np.logical_and(initial_frame <= framesets, framesets < final_frame))
-
-                #node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
-                #edge_connects_removed_node = np.any(
-                #    (graph[2] < node_start) | (graph[2] >= node_start + num_nodes),
-                #    axis=-1,
-                #)
-
-                edge_connects_removed_node = np.any(~np.isin(graph[2], nodeidxs), axis=-1)
-
-                #node_features = graph[0][node_start : node_start + num_nodes]
-                node_features = graph[0][nodeidxs]
-                edge_features = graph[1][~edge_connects_removed_node]
-                #edge_connections = graph[2][~edge_connects_removed_node] - node_start
-                edge_connections = graph[2][~edge_connects_removed_node] - np.min(nodeidxs)
-                weights = graph[3][~edge_connects_removed_node]
-
-                #node_labels = labels[0][node_start : node_start + num_nodes]
-                node_labels = labels[0][nodeidxs]
-                edge_labels = labels[1][~edge_connects_removed_node]
-                global_labels = labels[2]
-
-                #print(Counter(np.array(node_labels)))
-
-                return (node_features, edge_features, edge_connections, weights), (
-                    node_labels,
-                    edge_labels,
-                    global_labels,
+                centroids = centroids - 0.5
+                centroids_x = (
+                    centroids[:, 0] * np.cos(rotate)
+                    + centroids[:, 1] * np.sin(rotate)
                 )
+                centroids_y = (
+                    centroids[:, 1] * np.cos(rotate)
+                    - centroids[:, 0] * np.sin(rotate)
+                )
+                if flip_x:
+                    centroids_x *= -1
+                if flip_y:
+                    centroids_y *= -1
+
+                node_features = np.array(graph[0])
+                node_features[:, 0] = centroids_x + 0.5
+                node_features[:, 1] = centroids_y + 0.5
+
+                return (node_features, *graph[1:]), labels
 
             return inner
-        """
 
         def CustomGetFeature(full_graph, **kwargs):
             return (
                 dt.Value(full_graph)
-                >> dt.Lambda(CustomGetSubSet, randset=lambda: np.random.randint(np.max(full_graph[-1][0][:, 0]) + 1),)
+                >> dt.Lambda(CustomGetSubSet)
                 >> dt.Lambda(CustomGetSubGraph)
+                #>> dt.Lambda(CustomDatasetBalancing)
                 >> dt.Lambda(
                     AugmentCentroids,
                     rotate=lambda: np.random.rand() * 2 * np.pi,
-                    #translate=lambda: np.random.randn(2) * 0.05,
-                    translate=lambda: np.random.randn(2) * 0,
                     flip_x=lambda: np.random.randint(2),
                     flip_y=lambda: np.random.randint(2),
                 )
@@ -449,6 +418,29 @@ class BinaryClusterizedParticleDetector():
         with generator:
             self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"])
 
+        true = []
+        pred = []
+
+        for csv_file_name in self.get_dataset_file_paths_from(path):
+            print("Predicting on dataset", csv_file_name, "for threshold optimization...")
+            r = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=False)
+            true += r["solution"].values.tolist()
+            pred += r["solution_predicted"].values.tolist()
+
+        count = Counter(true)
+        positive_is_majority = count[1] > count[0]
+
+        if positive_is_majority:
+            true = 1 - np.array(true)
+            pred = 1 - np.array(pred)
+
+        thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
+
+        self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC')
+
+        if positive_is_majority:
+            self.threshold = 1 - self.threshold
+
     def plot_confusion_matrix(self, ground_truth, Y_predicted, normalized=True):
         confusion_mat = confusion_matrix(y_true=ground_truth, y_pred=Y_predicted)
 
@@ -467,3 +459,15 @@ class BinaryClusterizedParticleDetector():
         plt.ylabel("Ground truth", fontsize=15)
         plt.xlabel("Predicted label", fontsize=15)
         plt.show()
+
+    def save_model(self):
+        self.magik_architecture.save_weights(self.model_file_name('h5'))
+
+        with open(self.model_file_name('bin'), "w") as f:
+            f.write(str(self.threshold))
+        
+    def load_model(self):
+        self.magik_architecture.load_weights(self.model_file_name('h5'))
+
+        with open(self.model_file_name('bin'), "r") as f:
+            self.threshold = float(f.read())

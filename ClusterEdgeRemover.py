@@ -23,7 +23,7 @@ from sklearn import metrics
 logging.disable(logging.WARNING)
 
 
-class SubClusterLinking():
+class ClusterEdgeRemover():
     def __init__(self, height=10, width=10):
         self._output_type = "edges"
         self.magik_architecture = None
