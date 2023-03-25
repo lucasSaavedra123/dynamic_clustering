@@ -418,6 +418,8 @@ class LocalizationClassifier():
         with generator:
             self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"])
 
+        del train_full_graph
+
         true = []
         pred = []
 
