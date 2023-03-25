@@ -5,14 +5,19 @@ import pandas as pd
 
 shuffled_to_dir = 'datasets_shuffled'
 
-files = [f'./datasets/{file}' for file in os.listdir(f'./datasets') if '.csv' in file]
-files += [f'./datasets_without_clustering/{file}' for file in os.listdir(f'./datasets_without_clustering') if '.csv' in file]
-files += [f'./datasets_without_new_clusters/{file}' for file in os.listdir(f'./datasets_without_new_clusters') if '.csv' in file]
+files = []
+origin_datasets_paths = ['./datasets', './datasets_without_clustering', './datasets_without_new_clusters']
+
+for original_datasets_path in origin_datasets_paths:
+    files += [os.path.join(original_datasets_path, file) for file in os.listdir(original_datasets_path) if '.csv' in file]
+
 shuffle(files)
 
-for new_dataset_number, file in enumerate(files):
-    shutil.copy(file, f'./{shuffled_to_dir}/{new_dataset_number}_smlm_dataset.csv')
-    a = pd.read_csv(f'./{shuffled_to_dir}/{new_dataset_number}_smlm_dataset.csv')
+number_of_files = len(files)
+number_of_training_files = int(number_of_files * 0.8)
 
-    number_of_clusterized += len(a[a['clusterized'] == 1])
-    number_of_non_clusterized += len(a[a['clusterized'] == 0])
+for new_dataset_number, file in enumerate(files[:number_of_training_files]):
+    shutil.copy(file, f'./{shuffled_to_dir}/train/{new_dataset_number}_smlm_dataset.csv')
+
+for new_dataset_number, file in enumerate(files[number_of_training_files:]):
+    shutil.copy(file, f'./{shuffled_to_dir}/test/{new_dataset_number}_smlm_dataset.csv')
