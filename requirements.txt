@@ -23,6 +23,7 @@ fastrlock==0.8.1
 flatbuffers==23.1.21
 fonttools==4.38.0
 gast==0.4.0
+ghostml==0.3.0
 google-auth==2.16.1
 google-auth-oauthlib==0.4.6
 google-pasta==0.2.0
