@@ -25,9 +25,9 @@ class LocalizationClassifier():
     def default_hyperparameters(cls):
         return {
             "learning_rate": 0.001,
-            "radius": 0.1,
-            "nofframes": 7,
-            "partition_size": 1000,
+            "radius": 0.25,
+            "nofframes": 11,
+            "partition_size": 250,
             "epochs": 25,
             "batch_size": 4,
         }
@@ -65,8 +65,8 @@ class LocalizationClassifier():
 
         self.magik_architecture.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=self.hyperparameters['learning_rate']),
-            loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
-            #loss="mse",
+            #loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
+            loss="mse",
             metrics=['accuracy', tf.keras.metrics.AUC()]
         )
 
@@ -111,7 +111,7 @@ class LocalizationClassifier():
         full_dataset = pd.DataFrame({})
 
         for csv_file_index, csv_file_path in enumerate(self.get_dataset_file_paths_from(path)):
-            full_dataset = full_dataset.append(self.get_dataset_from_path(csv_file_path, set_number=csv_file_index))
+            full_dataset = full_dataset.append(self.get_dataset_from_path(csv_file_path, set_number=csv_file_index), ignore_index=True)
 
         return full_dataset.reset_index(drop=True)
 
@@ -183,10 +183,10 @@ class LocalizationClassifier():
                 df_window = df_set[df_set[FRAME_COLUMN_NAME].isin(window)].copy()
                 df_window = df_window.merge(df_window, how='cross')
                 df_window = df_window[df_window['index_x'] != df_window['index_y']]
-                #df_window['distance-x'] = df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}-x_y"]
-                #df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
-                #df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
-                df_window['distance'] = np.linalg.norm(df_window.loc[:, [f"{MAGIK_X_POSITION_COLUMN_NAME}_x", f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"]].values - df_window.loc[:, [f"{MAGIK_X_POSITION_COLUMN_NAME}_y", f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]].values, axis=1)
+                df_window['distance-x'] = df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_y"]
+                df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
+                df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
+                #df_window['distance'] = np.linalg.norm(df_window.loc[:, [f"{MAGIK_X_POSITION_COLUMN_NAME}_x", f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"]].values - df_window.loc[:, [f"{MAGIK_X_POSITION_COLUMN_NAME}_y", f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]].values, axis=1)
                 df_window = df_window[df_window['distance'] < self.hyperparameters['radius']]
 
                 edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
@@ -286,8 +286,8 @@ class LocalizationClassifier():
             def inner(data):
                 graph, labels, sets = data
 
-                min_num_nodes = 750
-                max_num_nodes = 1500
+                min_num_nodes = 500
+                max_num_nodes = 3000
 
                 num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
 
@@ -406,8 +406,8 @@ class LocalizationClassifier():
         args = {
             "batch_function": lambda graph: graph[0],
             "label_function": lambda graph: graph[1],
-            "min_data_size": 256,
-            "max_data_size": 257,
+            "min_data_size": 512,
+            "max_data_size": 513,
             "batch_size": self.hyperparameters["batch_size"],
             "use_multi_inputs": False,
             **magik_variables.properties(),
