@@ -6,6 +6,7 @@ from CONSTANTS import *
 from argparse import ArgumentParser
 from argparse import BooleanOptionalAction
 
+
 def generate_colors_for_cluster_ids(max_cluster_id):
     color_list = ['blue', 'red', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown', 'olive', 'cyan', 'black', 'magenta', 'navy', 'lime', 'darkred']
     
@@ -25,10 +26,16 @@ parser.add_argument("-s", "--save_plots", default=False, dest="save_plots", acti
 parser.add_argument("-r", "--filter", default=False, dest="filter", action=BooleanOptionalAction)
 parser.add_argument("-b", "--binary_clustering", default=False, dest="binary_clustering", action=BooleanOptionalAction)
 parser.add_argument("-p", "--predicted", default=False, dest="predicted", action=BooleanOptionalAction)
+parser.add_argument("-mn", "--min_frame", default=None, dest="min_frame")
+parser.add_argument("-mx", "--max_frame", default=None, dest="max_frame")
 
 args = parser.parse_args()
 
 dataset = pd.read_csv(args.filename)
+
+if args.min_frame is not None and args.max_frame is not None:
+    dataset = dataset[int(args.min_frame) < dataset[FRAME_COLUMN_NAME]]
+    dataset = dataset[dataset[FRAME_COLUMN_NAME] < int(args.max_frame)]
 
 print(f"Average: {len(dataset)/max(dataset[FRAME_COLUMN_NAME])}")
 
@@ -56,10 +63,15 @@ if with_clustering:
         dataset[CLUSTER_ID_COLUMN_NAME] = dataset[column_to_pick].map(generate_colors_for_cluster_ids(max(dataset[column_to_pick])))
 
 if filter_flag:
+    original_number_of_localizations = len(dataset)
     if predicted:
         dataset = dataset[dataset[CLUSTERIZED_COLUMN_NAME+ '_predicted'] == 1]
     else:
         dataset = dataset[dataset[CLUSTERIZED_COLUMN_NAME] == 1]
+    new_number_of_localizations = len(dataset)
+
+    print(f"Number of Localizations Removed: {(original_number_of_localizations-new_number_of_localizations)/original_number_of_localizations}")
+
 if projection == '3d' or args.save_plots:
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')

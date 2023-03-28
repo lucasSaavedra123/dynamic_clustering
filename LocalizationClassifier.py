@@ -25,10 +25,10 @@ class LocalizationClassifier():
     def default_hyperparameters(cls):
         return {
             "learning_rate": 0.001,
-            "radius": 0.25,
+            "radius": 0.05,
             "nofframes": 11,
-            "partition_size": 250,
-            "epochs": 25,
+            "partition_size": 100,
+            "epochs": 5,
             "batch_size": 4,
         }
 
@@ -96,7 +96,10 @@ class LocalizationClassifier():
             MAGIK_LABEL_COLUMN_NAME_PREDICTED: CLUSTERIZED_COLUMN_NAME+"_predicted",
         })
 
-        magik_dataframe.loc[:, magik_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] * np.array([self.width, self.height]))
+        print(magik_dataframe)
+
+        magik_dataframe.loc[:, magik_dataframe.columns.str.contains(X_POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(X_POSITION_COLUMN_NAME)] * np.array([self.width]))
+        magik_dataframe.loc[:, magik_dataframe.columns.str.contains(Y_POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(Y_POSITION_COLUMN_NAME)] * np.array([self.height]))
         magik_dataframe = magik_dataframe.drop(MAGIK_DATASET_COLUMN_NAME, axis=1)
 
         return magik_dataframe.reset_index(drop=True)
@@ -234,6 +237,26 @@ class LocalizationClassifier():
     def model_file_name(self, extension='tmp'):
         return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.{extension}"
 
+    def test_with_datasets_from_path(self, path, plot=False):
+        true = []
+        pred = []
+
+        for csv_file_name in self.get_dataset_file_paths_from(path):
+            print("Predicting on dataset", csv_file_name, "for threshold optimization...")
+            r = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=True)
+            true += r[MAGIK_LABEL_COLUMN_NAME].values.tolist()
+            pred += r[MAGIK_LABEL_COLUMN_NAME_PREDICTED].values.tolist()
+        
+        """
+        pd.DataFrame({
+            'true': true,
+            'pred': pred
+        }).to_csv('result.csv')
+        """
+
+        if plot:
+            self.plot_confusion_matrix(true, pred)
+
     def fit_with_datasets_from_path(self, path):
         if os.path.exists(self.model_file_name()):
             fileObj = open(self.model_file_name(), 'rb')
@@ -287,7 +310,7 @@ class LocalizationClassifier():
                 graph, labels, sets = data
 
                 min_num_nodes = 500
-                max_num_nodes = 3000
+                max_num_nodes = 750
 
                 num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
 
@@ -419,6 +442,7 @@ class LocalizationClassifier():
             self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"])
 
         del train_full_graph
+        del generator
 
         true = []
         pred = []
@@ -469,6 +493,7 @@ class LocalizationClassifier():
             f.write(str(self.threshold))
         
     def load_model(self):
+        self.build_network()
         self.magik_architecture.load_weights(self.model_file_name('h5'))
 
         with open(self.model_file_name('bin'), "r") as f:
