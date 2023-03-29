@@ -38,7 +38,6 @@ class LocalizationClassifier():
             "learning_rate": [0.1, 0.01, 0.001],
             "radius": [0.01, 0.025, 0.05, 0.1, 0.25],
             "nofframes": [3, 5, 7, 9, 11],
-            #"partition_size": [25, 50, 75, 100],
             "batch_size": [1,2,4]
         }
 
