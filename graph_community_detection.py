@@ -8,15 +8,15 @@ import numpy as np
 
 
 #Training
-#classifier = LocalizationClassifier(10,10)
-#classifier.fit_with_datasets_from_path('./datasets_shuffled/train')
-#classifier.save_model()
-
+classifier = LocalizationClassifier(10,10)
+classifier.fit_with_datasets_from_path('./datasets_shuffled/train')
+classifier.save_model()
 #Testing
-#classifier = LocalizationClassifier(10,10)
-#classifier.load_model()
-#classifier.test_with_datasets_from_path('./datasets_shuffled/test')
-
+"""
+classifier = LocalizationClassifier(10,10)
+classifier.load_model()
+classifier.test_with_datasets_from_path('./datasets_shuffled/train', apply_threshold=False, save_result=True)
+"""
 #Visualize Testing
 # normalized = True
 # result = pd.read_csv('result.csv')
@@ -43,10 +43,28 @@ import numpy as np
 # plt.show()
 
 #Infering
-classifier = LocalizationClassifier(10,10)
-classifier.load_model()
+#classifier = LocalizationClassifier(10,10)
+#classifier.load_model()
 
 #['CDx_mAb', 'CDx_BTX', 'CDx-Chol_BTX', 'CDx-Chol_mAb', 'Control_BTX', 'Control_mAb']
 
-for experimental_conditions in ['CDx_mAb']:
-    classifier.transform_magik_dataframe_to_smlm_dataset(classifier.predict(classifier.get_dataset_from_path(f'./data/{experimental_conditions}.csv'), apply_threshold=True)).to_csv(f'./data/{experimental_conditions}_localization_classifier_result.csv')
+#for experimental_conditions in ['Control_BTX', 'Control_mAb']:
+#    classifier.transform_magik_dataframe_to_smlm_dataset(classifier.predict(classifier.get_dataset_from_path(f'./data/{experimental_conditions}.csv'))).to_csv(f'./data/{experimental_conditions}_localization_classifier_result.csv')
+
+
+"""
+from plot_metric.functions import BinaryClassification
+import pandas as pd
+
+resultados = pd.read_csv('result_100.csv')
+y_test = resultados['true'].values.tolist()
+y_pred = resultados['pred'].values.tolist()
+
+# Visualisation with plot_metric
+bc = BinaryClassification(y_test, y_pred, labels=["Non-Clusterized", "Clusterized"])
+
+# Figures
+plt.figure(figsize=(5,5))
+bc.plot_roc_curve(threshold=0.725)
+plt.show()
+"""

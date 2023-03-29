@@ -5,14 +5,11 @@ import deeptrack as dt
 import tensorflow as tf
 import numpy as np
 import pandas as pd
-import math
 import os
 from scipy.spatial import Delaunay
 import logging
-import more_itertools as mit
 import tqdm
 from operator import is_not
-from functools import partial
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -24,13 +21,6 @@ logging.disable(logging.WARNING)
 
 
 class ClusterEdgeRemover():
-    def __init__(self, height=10, width=10):
-        self._output_type = "edges"
-        self.magik_architecture = None
-        self.hyperparameters = self.__class__.default_hyperparameters()
-        self.height = height
-        self.width = width
-
     @classmethod
     def default_hyperparameters(cls):
         return {
@@ -52,18 +42,33 @@ class ClusterEdgeRemover():
             "batch_size": [1,2,4]
         }
 
+    def __init__(self, height=10, width=10):
+        self._output_type = "edges"
+
+        self.magik_architecture = None
+        self.threshold = 0.5
+
+        self.hyperparameters = self.__class__.default_hyperparameters()
+        self.height = height
+        self.width = width
+
+    @property
+    def node_features(self):
+        #return [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
+        return [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]
+
+    @property
+    def edge_features(self):
+        return ["distance"]
+
     def build_network(self):
         self.magik_architecture = dt.models.gnns.MAGIK(
-            # number of features in each dense encoder layer
             dense_layer_dimensions=(64, 96,),
-            # Latent dimension throughout the message passing layers
             base_layer_dimensions=(96, 96, 96),
-            number_of_node_features=3,              # Number of node features in the graphs
-            number_of_edge_features=1,              # Number of edge features in the graphs
-            number_of_edge_outputs=1,               # Number of predicted features
-            # Activation function for the output layer
+            number_of_node_features=len(self.node_features),
+            number_of_edge_features=len(self.edge_features),
+            number_of_edge_outputs=1,
             node_output_activation="sigmoid",
-            # Output type. Either "edges", "nodes", or "graph"
             output_type=self._output_type,
         )
 
@@ -77,46 +82,39 @@ class ClusterEdgeRemover():
         self.magik_architecture.summary()
 
     def transform_magik_dataframe_to_smlm_dataset(self, magik_dataframe):
-        # normalize centroids between 0 and 1
-        magik_dataframe.loc[:, magik_dataframe.columns.str.contains(POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(POSITION_COLUMN_NAME)] * np.array([self.width, self.height]))
+        magik_dataframe.loc[:, magik_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] * np.array([self.width, self.height]))
 
         magik_dataframe = magik_dataframe.rename(columns={
-            f"{POSITION_COLUMN_NAME}-x": X_POSITION_COLUMN_NAME,
-            f"{POSITION_COLUMN_NAME}-y": Y_POSITION_COLUMN_NAME,
-            LABEL_COLUMN_NAME: CLUSTER_ID_COLUMN_NAME,
-            LABEL_COLUMN_NAME+"_predicted": CLUSTER_ID_COLUMN_NAME+"_predicted",
+            MAGIK_X_POSITION_COLUMN_NAME: X_POSITION_COLUMN_NAME,
+            MAGIK_Y_POSITION_COLUMN_NAME: Y_POSITION_COLUMN_NAME,
+            MAGIK_LABEL_COLUMN_NAME: CLUSTER_ID_COLUMN_NAME,
+            MAGIK_LABEL_COLUMN_NAME_PREDICTED: CLUSTER_ID_COLUMN_NAME+"_predicted",
         })
 
-        magik_dataframe = magik_dataframe.drop(DATASET_COLUMN_NAME, axis=1)
+        magik_dataframe = magik_dataframe.drop(MAGIK_DATASET_COLUMN_NAME, axis=1)
+
         return magik_dataframe
 
     def transform_smlm_dataset_to_magik_dataframe(self, smlm_dataframe, set_number=0, coming_from_binary_node_classification=False):
         smlm_dataframe = smlm_dataframe.rename(columns={
-            X_POSITION_COLUMN_NAME: f"{POSITION_COLUMN_NAME}-x",
-            Y_POSITION_COLUMN_NAME: f"{POSITION_COLUMN_NAME}-y",
-            CLUSTER_ID_COLUMN_NAME: LABEL_COLUMN_NAME,
+            X_POSITION_COLUMN_NAME: MAGIK_X_POSITION_COLUMN_NAME,
+            Y_POSITION_COLUMN_NAME: MAGIK_Y_POSITION_COLUMN_NAME,
+            CLUSTER_ID_COLUMN_NAME: MAGIK_LABEL_COLUMN_NAME,
+            CLUSTER_ID_COLUMN_NAME+"_predicted": MAGIK_LABEL_COLUMN_NAME_PREDICTED,
         })
 
         if coming_from_binary_node_classification:    
             smlm_dataframe = smlm_dataframe[smlm_dataframe[CLUSTERIZED_COLUMN_NAME+'_predicted'] == 1]
         else:
             smlm_dataframe = smlm_dataframe[smlm_dataframe[CLUSTERIZED_COLUMN_NAME] == 1]
+        
+        smlm_dataframe = smlm_dataframe.drop([CLUSTERIZED_COLUMN_NAME, CLUSTERIZED_COLUMN_NAME+'_predicted', PARTICLE_ID_COLUMN_NAME, "Unnamed: 0"], axis=1, errors="ignore")
+        smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] / np.array([self.width, self.height]))
+        
+        #smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / smlm_dataframe[TIME_COLUMN_NAME].abs().max()
 
-        if CLUSTERIZED_COLUMN_NAME in smlm_dataframe.columns:
-            smlm_dataframe = smlm_dataframe.drop(CLUSTERIZED_COLUMN_NAME, axis=1)
-        if CLUSTERIZED_COLUMN_NAME+'_predicted' in smlm_dataframe.columns:
-            smlm_dataframe = smlm_dataframe.drop(CLUSTERIZED_COLUMN_NAME+'_predicted', axis=1)
-        if PARTICLE_ID_COLUMN_NAME in smlm_dataframe.columns:
-            smlm_dataframe = smlm_dataframe.drop(PARTICLE_ID_COLUMN_NAME, axis=1)
-        if "Unnamed: 0" in smlm_dataframe.columns:
-            smlm_dataframe = smlm_dataframe.drop("Unnamed: 0", axis=1)
-
-        # normalize centroids between 0 and 1
-        smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(POSITION_COLUMN_NAME)] = (smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(POSITION_COLUMN_NAME)] / np.array([self.width, self.height]))
-        smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / smlm_dataframe[TIME_COLUMN_NAME].abs().max()
-
-        smlm_dataframe[DATASET_COLUMN_NAME] = set_number
-        smlm_dataframe[LABEL_COLUMN_NAME] = smlm_dataframe[LABEL_COLUMN_NAME].astype(float)
+        smlm_dataframe[MAGIK_DATASET_COLUMN_NAME] = set_number
+        smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(float)
 
         return smlm_dataframe.reset_index(drop=True)
 
@@ -128,7 +126,7 @@ class ClusterEdgeRemover():
         full_dataset = pd.DataFrame({})
         set_index = 0
 
-        for csv_file_name in file_names[0:4]:
+        for csv_file_name in file_names:
             set_dataframe = self.get_dataset_from_path(os.path.join(path, csv_file_name), set_number=set_index)
 
             if not set_dataframe.empty:
@@ -137,7 +135,7 @@ class ClusterEdgeRemover():
 
         return full_dataset.reset_index(drop=True)
 
-    def predict(self, magik_dataset, threshold=0.5):
+    def predict(self, magik_dataset):
         magik_dataset = magik_dataset.copy()
         remaining_edges_keep = None
 
@@ -169,7 +167,7 @@ class ClusterEdgeRemover():
                 edge_weights.reshape(1, edge_weights.shape[0], edge_weights.shape[1]),
             ]
 
-            predictions = (self.magik_architecture(v).numpy() > threshold)[0, ...]
+            predictions = (self.magik_architecture(v).numpy() > self.threshold)[0, ...]
             edges_to_remove = np.where(predictions == 0)[0]
             current_remaining_edges_keep = np.delete(edge_connections, edges_to_remove, axis=0)
             current_remaining_edges_keep = np.vectorize(inverse_map_node_id)(current_remaining_edges_keep)
@@ -178,11 +176,6 @@ class ClusterEdgeRemover():
                 remaining_edges_keep = current_remaining_edges_keep
             else:
                 remaining_edges_keep = np.append(remaining_edges_keep, current_remaining_edges_keep, axis=0)
-
-        """
-        edges_to_remove = np.where(grapht[1][1] == 0)[0]
-        remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
-        """
 
         cluster_sets = []
 
@@ -201,16 +194,16 @@ class ClusterEdgeRemover():
                 if not cluster_assigned:
                     cluster_sets.append(set([remaining_edges_keep[i][0], remaining_edges_keep[i][1]]))
 
-        magik_dataset[LABEL_COLUMN_NAME+"_predicted"] = 0
+        magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
         for index, a_set in enumerate(cluster_sets):
             for value in a_set:
-                magik_dataset.loc[original_index[value], LABEL_COLUMN_NAME+"_predicted"] = index + 1
+                magik_dataset.loc[original_index[value], MAGIK_LABEL_COLUMN_NAME_PREDICTED] = index + 1
         
         #magik_dataset[LABEL_COLUMN_NAME+"_predicted"] = magik_dataset[LABEL_COLUMN_NAME+"_predicted"].astype(int)
 
-        if LABEL_COLUMN_NAME in magik_dataset.columns:
-            magik_dataset[LABEL_COLUMN_NAME] = magik_dataset[LABEL_COLUMN_NAME].astype(int)
+        if MAGIK_LABEL_COLUMN_NAME in magik_dataset.columns:
+            magik_dataset[MAGIK_LABEL_COLUMN_NAME] = magik_dataset[MAGIK_LABEL_COLUMN_NAME].astype(int)
 
         return magik_dataset
 
@@ -224,7 +217,7 @@ class ClusterEdgeRemover():
         })
 
         #We iterate on all the datasets and we extract all the edges.
-        sets = np.unique(full_nodes_dataset[DATASET_COLUMN_NAME])
+        sets = np.unique(full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME])
 
         if verbose:
             iterator = tqdm.tqdm(sets)
@@ -238,7 +231,7 @@ class ClusterEdgeRemover():
         dbscan_result_by_subcluster_id = {}
 
         for setid in iterator:
-            df_set = full_nodes_dataset[full_nodes_dataset[DATASET_COLUMN_NAME] == setid].copy().reset_index(drop=True)
+            df_set = full_nodes_dataset[full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index(drop=True)
             eps_values = np.linspace(0, 1, 100)
 
             results = {}
@@ -264,7 +257,7 @@ class ClusterEdgeRemover():
                 cluster_df = df_set.loc[localizations_in_subcluster].copy()
                 count = Counter(cluster_df['solution'])
                 if for_predict or (len(cluster_df['solution'].unique()) > 1 and (np.array([count[value] for value in count]) > 10).all()):
-                    cluster_df[DATASET_COLUMN_NAME] = global_sub_cluster_id
+                    cluster_df[MAGIK_DATASET_COLUMN_NAME] = global_sub_cluster_id
                     dbscan_result_by_subcluster_id[global_sub_cluster_id] = selected_eps_value
                     global_sub_cluster_id += 1
                     clusters_extracted_from_dbscan = clusters_extracted_from_dbscan.append(cluster_df, ignore_index=(not for_predict))
@@ -274,7 +267,7 @@ class ClusterEdgeRemover():
         clusters_extracted_from_dbscan['index'] = clusters_extracted_from_dbscan.index
 
         #We iterate on all the datasets and we extract all the edges.
-        sets = np.unique(clusters_extracted_from_dbscan[DATASET_COLUMN_NAME])
+        sets = np.unique(clusters_extracted_from_dbscan[MAGIK_DATASET_COLUMN_NAME])
 
         if verbose:
             iterator = tqdm.tqdm(sets)
@@ -284,7 +277,7 @@ class ClusterEdgeRemover():
         for setid in iterator:
             new_edges_dataframe = pd.DataFrame({'index_1': [], 'index_2': [],'distance': [], 'same_cluster': []})
             df_window = clusters_extracted_from_dbscan[clusters_extracted_from_dbscan['set'] == setid].copy().reset_index(drop=True)
-            simplices = Delaunay(df_window[[f"{POSITION_COLUMN_NAME}-x", f"{POSITION_COLUMN_NAME}-y", "t"]].values).simplices
+            simplices = Delaunay(df_window[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]].values).simplices
 
             def less_first(a, b):
                 return [a,b] if a < b else [b,a]
@@ -300,14 +293,14 @@ class ClusterEdgeRemover():
             list_of_edges = np.unique(list_of_edges, axis=0).tolist() # remove duplicates
 
             simplified_cross = pd.DataFrame({
-                f"{POSITION_COLUMN_NAME}-x_x": [],
-                f"{POSITION_COLUMN_NAME}-x_y": [],
-                f"{POSITION_COLUMN_NAME}-y_x": [],
-                f"{POSITION_COLUMN_NAME}-y_y": [],
+                f"{MAGIK_X_POSITION_COLUMN_NAME}_x": [],
+                f"{MAGIK_X_POSITION_COLUMN_NAME}_y": [],
+                f"{MAGIK_Y_POSITION_COLUMN_NAME}_x": [],
+                f"{MAGIK_Y_POSITION_COLUMN_NAME}_y": [],
                 'index_x': [],
                 'index_y': [],
-                LABEL_COLUMN_NAME+"_x": [],
-                LABEL_COLUMN_NAME+"_y": [],
+                MAGIK_LABEL_COLUMN_NAME+"_x": [],
+                MAGIK_LABEL_COLUMN_NAME+"_y": [],
                 TIME_COLUMN_NAME+"_x": [],
                 TIME_COLUMN_NAME+"_y": []
             })
@@ -317,33 +310,24 @@ class ClusterEdgeRemover():
                 y_index = df_window["index"] == edge[1]
 
                 simplified_cross = simplified_cross.append(pd.DataFrame({
-                    f"{POSITION_COLUMN_NAME}-x_x": [df_window[x_index][f"{POSITION_COLUMN_NAME}-x"].values[0]],
-                    f"{POSITION_COLUMN_NAME}-x_y": [df_window[y_index][f"{POSITION_COLUMN_NAME}-x"].values[0]],
-                    f"{POSITION_COLUMN_NAME}-y_x": [df_window[x_index][f"{POSITION_COLUMN_NAME}-y"].values[0]],
-                    f"{POSITION_COLUMN_NAME}-y_y": [df_window[y_index][f"{POSITION_COLUMN_NAME}-y"].values[0]],
+                    f"{MAGIK_X_POSITION_COLUMN_NAME}_x": [df_window[x_index][f"{MAGIK_X_POSITION_COLUMN_NAME}"].values[0]],
+                    f"{MAGIK_X_POSITION_COLUMN_NAME}_y": [df_window[y_index][f"{MAGIK_X_POSITION_COLUMN_NAME}"].values[0]],
+                    f"{MAGIK_X_POSITION_COLUMN_NAME}_x": [df_window[x_index][f"{MAGIK_Y_POSITION_COLUMN_NAME}"].values[0]],
+                    f"{MAGIK_Y_POSITION_COLUMN_NAME}_y": [df_window[y_index][f"{MAGIK_Y_POSITION_COLUMN_NAME}"].values[0]],
                     'index_x': [edge[0]],
                     'index_y': [edge[1]],
-                    LABEL_COLUMN_NAME+"_x": [df_window[x_index][f"{LABEL_COLUMN_NAME}"].values[0]],
-                    LABEL_COLUMN_NAME+"_y": [df_window[y_index][f"{LABEL_COLUMN_NAME}"].values[0]],
+                    MAGIK_LABEL_COLUMN_NAME+"_x": [df_window[x_index][f"{MAGIK_LABEL_COLUMN_NAME}"].values[0]],
+                    MAGIK_LABEL_COLUMN_NAME+"_y": [df_window[y_index][f"{MAGIK_LABEL_COLUMN_NAME}"].values[0]],
                     TIME_COLUMN_NAME+"_x": [df_window[x_index][f"{TIME_COLUMN_NAME}"].values[0]],
                     TIME_COLUMN_NAME+"_y": [df_window[y_index][f"{TIME_COLUMN_NAME}"].values[0]],
                 }), ignore_index=True)
 
             df_window = simplified_cross.copy()
-
-            """
-            def filter_fn(row):
-                return [row['index_x'], row['index_y']] in list_of_edges
-
-            df_window = df_window.merge(df_window, how='cross')
-            result = df_window.apply(filter_fn, axis=1, )
-            df_window = df_window[result]
-            """
             df_window = df_window[df_window['index_x'] != df_window['index_y']]
-            df_window['distance-x'] = df_window[f"{POSITION_COLUMN_NAME}-x_x"] - df_window[f"{POSITION_COLUMN_NAME}-x_y"]
-            df_window['distance-y'] = df_window[f"{POSITION_COLUMN_NAME}-y_x"] - df_window[f"{POSITION_COLUMN_NAME}-y_y"]
+            df_window['distance-x'] = df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_y"]
+            df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
             df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
-            df_window['same_cluster'] = (df_window[LABEL_COLUMN_NAME+"_x"] == df_window[LABEL_COLUMN_NAME+"_y"])
+            df_window['same_cluster'] = (df_window[MAGIK_LABEL_COLUMN_NAME+"_x"] == df_window[MAGIK_LABEL_COLUMN_NAME+"_y"])
             #df_window = df_window[df_window['distance'] < self.hyperparameters['radius']]
 
             if for_predict or not df_window['same_cluster'].all():
@@ -360,9 +344,9 @@ class ClusterEdgeRemover():
             new_edges_dataframe['set'] = setid
             edges_dataframe = edges_dataframe.append(new_edges_dataframe, ignore_index=True)
 
-        edgefeatures = edges_dataframe[["distance"]].to_numpy()
+        edgefeatures = edges_dataframe[self.edge_features].to_numpy()
         sparseadjmtx = edges_dataframe[["index_1", "index_2"]].to_numpy().astype(int)
-        nodefeatures = clusters_extracted_from_dbscan[[f"{POSITION_COLUMN_NAME}-x", f"{POSITION_COLUMN_NAME}-y", TIME_COLUMN_NAME]].to_numpy()
+        nodefeatures = clusters_extracted_from_dbscan[self.node_features].to_numpy()
 
         edgeweights = np.ones(sparseadjmtx.shape[0])
         edgeweights = np.stack((np.arange(0, edgeweights.shape[0]), edgeweights), axis=1)
@@ -370,11 +354,11 @@ class ClusterEdgeRemover():
         nfsolution = np.zeros((len(nodefeatures), 1))
         efsolution = edges_dataframe[['same_cluster']].to_numpy().astype(int)
 
-        nodesets = clusters_extracted_from_dbscan[[DATASET_COLUMN_NAME]].to_numpy().astype(int)
-        edgesets = edges_dataframe[[DATASET_COLUMN_NAME]].to_numpy().astype(int)
+        nodesets = clusters_extracted_from_dbscan[[MAGIK_DATASET_COLUMN_NAME]].to_numpy().astype(int)
+        edgesets = edges_dataframe[[MAGIK_DATASET_COLUMN_NAME]].to_numpy().astype(int)
         framesets = clusters_extracted_from_dbscan[[FRAME_COLUMN_NAME]].to_numpy().astype(int)
 
-        global_property = np.zeros(np.unique(clusters_extracted_from_dbscan[DATASET_COLUMN_NAME]).shape[0])
+        global_property = np.zeros(np.unique(clusters_extracted_from_dbscan[MAGIK_DATASET_COLUMN_NAME]).shape[0])
 
         if for_predict:
             return (
@@ -390,19 +374,13 @@ class ClusterEdgeRemover():
             )            
 
     def fit_with_datasets_from_path(self, path):
-        """
-        !!!
-        THIS FILE PERSISTANCE IS TEMPORAL
-        !!!
-        """
-
-        if os.path.exists('tmp2.tmp2'):
-            fileObj = open('tmp2.tmp2', 'rb')
+        if os.path.exists(self.model_file_name('tmp')):
+            fileObj = open(self.model_file_name('tmp'), 'rb')
             train_full_graph = pickle.load(fileObj)
             fileObj.close()
         else:
             train_full_graph = self.build_graph(self.get_datasets_from_path(path))
-            fileObj = open('tmp2.tmp2', 'wb')
+            fileObj = open(self.model_file_name('tmp'), 'wb')
             pickle.dump(train_full_graph, fileObj)
             fileObj.close()
 
@@ -491,8 +469,6 @@ class ClusterEdgeRemover():
                     edge_labels,
                     global_labels,
                 )
-            
-                return graph, labels
 
             return inner
 
@@ -611,8 +587,8 @@ class ClusterEdgeRemover():
         args = {
             "batch_function": lambda graph: graph[0],
             "label_function": lambda graph: graph[1],
-            "min_data_size": 256,
-            "max_data_size": 257,
+            "min_data_size": 512,
+            "max_data_size": 513,
             "batch_size": self.hyperparameters["batch_size"],
             "use_multi_inputs": False,
             **magik_variables.properties(),
@@ -641,3 +617,6 @@ class ClusterEdgeRemover():
         plt.ylabel("Ground truth", fontsize=15)
         plt.xlabel("Predicted label", fontsize=15)
         plt.show()
+
+    def model_file_name(self, extension='tmp'):
+        return f"edge_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.{extension}"

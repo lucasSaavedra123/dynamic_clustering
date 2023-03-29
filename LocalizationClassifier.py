@@ -52,6 +52,14 @@ class LocalizationClassifier():
         self.height = height
         self.width = width
 
+    @property
+    def node_features(self):
+        return [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]
+
+    @property
+    def edge_features(self):
+        return ["distance"]
+
     def build_network(self):
         self.magik_architecture = dt.models.gnns.MAGIK(
             dense_layer_dimensions=(64, 96,),
@@ -89,6 +97,8 @@ class LocalizationClassifier():
         return smlm_dataframe.reset_index(drop=True)
 
     def transform_magik_dataframe_to_smlm_dataset(self, magik_dataframe):
+        magik_dataframe.loc[:, magik_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] * np.array([self.width, self.height]))
+
         magik_dataframe = magik_dataframe.rename(columns={
             MAGIK_X_POSITION_COLUMN_NAME: X_POSITION_COLUMN_NAME,
             MAGIK_Y_POSITION_COLUMN_NAME: Y_POSITION_COLUMN_NAME,
@@ -96,10 +106,6 @@ class LocalizationClassifier():
             MAGIK_LABEL_COLUMN_NAME_PREDICTED: CLUSTERIZED_COLUMN_NAME+"_predicted",
         })
 
-        print(magik_dataframe)
-
-        magik_dataframe.loc[:, magik_dataframe.columns.str.contains(X_POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(X_POSITION_COLUMN_NAME)] * np.array([self.width]))
-        magik_dataframe.loc[:, magik_dataframe.columns.str.contains(Y_POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(Y_POSITION_COLUMN_NAME)] * np.array([self.height]))
         magik_dataframe = magik_dataframe.drop(MAGIK_DATASET_COLUMN_NAME, axis=1)
 
         return magik_dataframe.reset_index(drop=True)
@@ -226,246 +232,253 @@ class LocalizationClassifier():
             (nodesets, edgesets, framesets)
         )
 
-    @property
-    def node_features(self):
-        return [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]
+    def train_full_graph_file_name(self):
+        return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.tmp"
 
-    @property
-    def edge_features(self):
-        return ["distance"]
+    def model_file_name(self):
+        return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.h5"
 
-    def model_file_name(self, extension='tmp'):
-        return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.{extension}"
+    def threshold_file_name(self):
+        return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.bin"
 
-    def test_with_datasets_from_path(self, path, plot=False):
+    def raw_predictions_file_name(self):
+        return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv"
+
+    def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False):
         true = []
         pred = []
 
         for csv_file_name in self.get_dataset_file_paths_from(path):
-            print("Predicting on dataset", csv_file_name, "for threshold optimization...")
-            r = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=True)
+            r = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=apply_threshold)
             true += r[MAGIK_LABEL_COLUMN_NAME].values.tolist()
             pred += r[MAGIK_LABEL_COLUMN_NAME_PREDICTED].values.tolist()
-        
-        """
-        pd.DataFrame({
-            'true': true,
-            'pred': pred
-        }).to_csv('result.csv')
-        """
+
+        if save_result:
+            pd.DataFrame({
+                'true': true,
+                'pred': pred
+            }).to_csv(self.raw_predictions_file_name(), index=False)
 
         if plot:
             self.plot_confusion_matrix(true, pred)
 
+        return true, pred
+
     def fit_with_datasets_from_path(self, path):
-        if os.path.exists(self.model_file_name()):
-            fileObj = open(self.model_file_name(), 'rb')
+        if os.path.exists(self.train_full_graph_file_name()):
+            fileObj = open(self.train_full_graph_file_name(), 'rb')
             train_full_graph = pickle.load(fileObj)
             fileObj.close()
         else:
             train_full_graph = self.build_graph(self.get_datasets_from_path(path))
-            fileObj = open(self.model_file_name(), 'wb')
+            fileObj = open(self.train_full_graph_file_name(), 'wb')
             pickle.dump(train_full_graph, fileObj)
             fileObj.close()
 
         self.build_network()
 
-        def CustomGetSubSet():
-            def inner(data):
-                graph, labels, sets = data
+        if not os.path.exists(self.model_file_name()):
 
-                randset= np.random.randint(np.max(sets[0][:, 0]) + 1)
+            def CustomGetSubSet():
+                def inner(data):
+                    graph, labels, sets = data
 
-                nodeidxs = np.where(sets[0][:, 0] == randset)[0]
-                edgeidxs = np.where(sets[1][:, 0] == randset)[0]
+                    randset= np.random.randint(np.max(sets[0][:, 0]) + 1)
 
-                node_features = graph[0][nodeidxs]
-                edge_features = graph[1][edgeidxs]
-                edge_connections = graph[2][edgeidxs] - np.min(nodeidxs)
+                    nodeidxs = np.where(sets[0][:, 0] == randset)[0]
+                    edgeidxs = np.where(sets[1][:, 0] == randset)[0]
 
-                weights = graph[3][edgeidxs]
+                    node_features = graph[0][nodeidxs]
+                    edge_features = graph[1][edgeidxs]
+                    edge_connections = graph[2][edgeidxs] - np.min(nodeidxs)
 
-                node_labels = labels[0][nodeidxs]
-                edge_labels = labels[1][edgeidxs]
-                glob_labels = labels[2][randset]
+                    weights = graph[3][edgeidxs]
 
-                #node_sets = sets[0][nodeidxs]
-                #edge_sets = sets[1][edgeidxs]
+                    node_labels = labels[0][nodeidxs]
+                    edge_labels = labels[1][edgeidxs]
+                    glob_labels = labels[2][randset]
 
-                #node_sets[:,0] = 0
-                #edge_sets[:,0] = 0
+                    #node_sets = sets[0][nodeidxs]
+                    #edge_sets = sets[1][edgeidxs]
 
-                frame_sets = sets[2][nodeidxs]
+                    #node_sets[:,0] = 0
+                    #edge_sets[:,0] = 0
 
-                return (node_features, edge_features, edge_connections, weights), (
-                    node_labels,
-                    edge_labels,
-                    glob_labels,
-                ), (frame_sets) #, (node_sets, edge_sets, frame_sets)
+                    frame_sets = sets[2][nodeidxs]
 
-            return inner
+                    return (node_features, edge_features, edge_connections, weights), (
+                        node_labels,
+                        edge_labels,
+                        glob_labels,
+                    ), (frame_sets) #, (node_sets, edge_sets, frame_sets)
 
-        def CustomGetSubGraph():
-            def inner(data):
-                graph, labels, sets = data
+                return inner
 
-                min_num_nodes = 500
-                max_num_nodes = 750
+            def CustomGetSubGraph():
+                def inner(data):
+                    graph, labels, sets = data
 
-                num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
+                    min_num_nodes = 500
+                    max_num_nodes = 750
 
-                node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
+                    num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
 
-                edge_connects_removed_node = np.any((graph[2] < node_start) | (graph[2] >= node_start + num_nodes),axis=-1)
+                    node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
 
-                node_features = graph[0][node_start : node_start + num_nodes]
-                edge_features = graph[1][~edge_connects_removed_node]
-                edge_connections = graph[2][~edge_connects_removed_node] - node_start
-                weights = graph[3][~edge_connects_removed_node]
+                    edge_connects_removed_node = np.any((graph[2] < node_start) | (graph[2] >= node_start + num_nodes),axis=-1)
 
-                node_labels = labels[0][node_start : node_start + num_nodes]
-                edge_labels = labels[1][~edge_connects_removed_node]
-                global_labels = labels[2]
-
-                return (node_features, edge_features, edge_connections, weights), (
-                    node_labels,
-                    edge_labels,
-                    global_labels,
-                )
-
-            return inner
-
-        def CustomDatasetBalancing():
-            def inner(data):
-                graph, labels = data
-
-                number_of_clusterized_nodes = np.sum(np.array((labels[0][:, 0] == 1)) * 1)
-                number_of_non_clusterized_nodes = np.sum(np.array(labels[0][:, 0] == 0) * 1)
-
-                if number_of_clusterized_nodes > number_of_non_clusterized_nodes:
-                    nodeidxs = np.array(np.where(labels[0][:, 0] == 1)[0])
-
-                    nodes_to_select = np.random.choice(nodeidxs, size=number_of_non_clusterized_nodes, replace=False)
-                    nodes_to_select = np.append(nodes_to_select, np.array(np.where(labels[0][:, 0] == 0)[0]))
-
-                    id_to_new_id = {}
-
-                    for index, value in enumerate(nodes_to_select):
-                        id_to_new_id[value] = index
-
-                    edge_connects_removed_node = np.any( ~np.isin(graph[2], nodes_to_select), axis=-1)
-
-                    node_features = graph[0][nodes_to_select]
+                    node_features = graph[0][node_start : node_start + num_nodes]
                     edge_features = graph[1][~edge_connects_removed_node]
-                    edge_connections = graph[2][~edge_connects_removed_node]
-
-                    edge_connections = np.vectorize(id_to_new_id.get)(edge_connections)
-
+                    edge_connections = graph[2][~edge_connects_removed_node] - node_start
                     weights = graph[3][~edge_connects_removed_node]
 
-                    node_labels = labels[0][nodes_to_select]
+                    node_labels = labels[0][node_start : node_start + num_nodes]
                     edge_labels = labels[1][~edge_connects_removed_node]
                     global_labels = labels[2]
- 
+
                     return (node_features, edge_features, edge_connections, weights), (
                         node_labels,
                         edge_labels,
                         global_labels,
                     )
-                else:
-                    return graph, labels
 
-            return inner
+                return inner
 
-        def AugmentCentroids(rotate, flip_x, flip_y):
-            def inner(data):
-                graph, labels = data
+            def CustomDatasetBalancing():
+                def inner(data):
+                    graph, labels = data
 
-                centroids = graph[0][:, :2]
+                    number_of_clusterized_nodes = np.sum(np.array((labels[0][:, 0] == 1)) * 1)
+                    number_of_non_clusterized_nodes = np.sum(np.array(labels[0][:, 0] == 0) * 1)
 
-                centroids = centroids - 0.5
-                centroids_x = (
-                    centroids[:, 0] * np.cos(rotate)
-                    + centroids[:, 1] * np.sin(rotate)
+                    if number_of_clusterized_nodes > number_of_non_clusterized_nodes:
+                        nodeidxs = np.array(np.where(labels[0][:, 0] == 1)[0])
+
+                        nodes_to_select = np.random.choice(nodeidxs, size=number_of_non_clusterized_nodes, replace=False)
+                        nodes_to_select = np.append(nodes_to_select, np.array(np.where(labels[0][:, 0] == 0)[0]))
+
+                        id_to_new_id = {}
+
+                        for index, value in enumerate(nodes_to_select):
+                            id_to_new_id[value] = index
+
+                        edge_connects_removed_node = np.any( ~np.isin(graph[2], nodes_to_select), axis=-1)
+
+                        node_features = graph[0][nodes_to_select]
+                        edge_features = graph[1][~edge_connects_removed_node]
+                        edge_connections = graph[2][~edge_connects_removed_node]
+
+                        edge_connections = np.vectorize(id_to_new_id.get)(edge_connections)
+
+                        weights = graph[3][~edge_connects_removed_node]
+
+                        node_labels = labels[0][nodes_to_select]
+                        edge_labels = labels[1][~edge_connects_removed_node]
+                        global_labels = labels[2]
+    
+                        return (node_features, edge_features, edge_connections, weights), (
+                            node_labels,
+                            edge_labels,
+                            global_labels,
+                        )
+                    else:
+                        return graph, labels
+
+                return inner
+
+            def AugmentCentroids(rotate, flip_x, flip_y):
+                def inner(data):
+                    graph, labels = data
+
+                    centroids = graph[0][:, :2]
+
+                    centroids = centroids - 0.5
+                    centroids_x = (
+                        centroids[:, 0] * np.cos(rotate)
+                        + centroids[:, 1] * np.sin(rotate)
+                    )
+                    centroids_y = (
+                        centroids[:, 1] * np.cos(rotate)
+                        - centroids[:, 0] * np.sin(rotate)
+                    )
+                    if flip_x:
+                        centroids_x *= -1
+                    if flip_y:
+                        centroids_y *= -1
+
+                    node_features = np.array(graph[0])
+                    node_features[:, 0] = centroids_x + 0.5
+                    node_features[:, 1] = centroids_y + 0.5
+
+                    return (node_features, *graph[1:]), labels
+
+                return inner
+
+            def CustomGetFeature(full_graph, **kwargs):
+                return (
+                    dt.Value(full_graph)
+                    >> dt.Lambda(CustomGetSubSet)
+                    >> dt.Lambda(CustomGetSubGraph)
+                    #>> dt.Lambda(CustomDatasetBalancing)
+                    >> dt.Lambda(
+                        AugmentCentroids,
+                        rotate=lambda: np.random.rand() * 2 * np.pi,
+                        flip_x=lambda: np.random.randint(2),
+                        flip_y=lambda: np.random.randint(2),
+                    )
+                    >> dt.Lambda(NodeDropout, dropout_rate=0.00)
                 )
-                centroids_y = (
-                    centroids[:, 1] * np.cos(rotate)
-                    - centroids[:, 0] * np.sin(rotate)
-                )
-                if flip_x:
-                    centroids_x *= -1
-                if flip_y:
-                    centroids_y *= -1
 
-                node_features = np.array(graph[0])
-                node_features[:, 0] = centroids_x + 0.5
-                node_features[:, 1] = centroids_y + 0.5
-
-                return (node_features, *graph[1:]), labels
-
-            return inner
-
-        def CustomGetFeature(full_graph, **kwargs):
-            return (
-                dt.Value(full_graph)
-                >> dt.Lambda(CustomGetSubSet)
-                >> dt.Lambda(CustomGetSubGraph)
-                #>> dt.Lambda(CustomDatasetBalancing)
-                >> dt.Lambda(
-                    AugmentCentroids,
-                    rotate=lambda: np.random.rand() * 2 * np.pi,
-                    flip_x=lambda: np.random.randint(2),
-                    flip_y=lambda: np.random.randint(2),
-                )
-                >> dt.Lambda(NodeDropout, dropout_rate=0.00)
+            magik_variables = dt.DummyFeature(
+                radius=self.hyperparameters["radius"],
+                output_type=self._output_type,
+                nofframes=self.hyperparameters["nofframes"],  # time window to associate nodes (in frames)
             )
 
-        magik_variables = dt.DummyFeature(
-            radius=self.hyperparameters["radius"],
-            output_type=self._output_type,
-            nofframes=self.hyperparameters["nofframes"],  # time window to associate nodes (in frames)
-        )
+            args = {
+                "batch_function": lambda graph: graph[0],
+                "label_function": lambda graph: graph[1],
+                "min_data_size": 512,
+                "max_data_size": 513,
+                "batch_size": self.hyperparameters["batch_size"],
+                "use_multi_inputs": False,
+                **magik_variables.properties(),
+            }
 
-        args = {
-            "batch_function": lambda graph: graph[0],
-            "label_function": lambda graph: graph[1],
-            "min_data_size": 512,
-            "max_data_size": 513,
-            "batch_size": self.hyperparameters["batch_size"],
-            "use_multi_inputs": False,
-            **magik_variables.properties(),
-        }
+            generator = ContinuousGraphGenerator(CustomGetFeature(train_full_graph, **magik_variables.properties()), **args)
 
-        generator = ContinuousGraphGenerator(CustomGetFeature(train_full_graph, **magik_variables.properties()), **args)
+            with generator:
+                self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"])
+           
+            del generator
 
-        with generator:
-            self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"])
+        else:
+            self.magik_architecture.load_weights(self.model_file_name())
 
         del train_full_graph
-        del generator
 
-        true = []
-        pred = []
+        if not os.path.exists(self.threshold_file_name()):
+            true = []
+            pred = []
 
-        for csv_file_name in self.get_dataset_file_paths_from(path):
-            print("Predicting on dataset", csv_file_name, "for threshold optimization...")
-            r = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=False)
-            true += r["solution"].values.tolist()
-            pred += r["solution_predicted"].values.tolist()
+            true, pred = self.test_with_datasets_from_path(apply_threshold=False, save_result=True)
 
-        count = Counter(true)
-        positive_is_majority = count[1] > count[0]
+            count = Counter(true)
+            positive_is_majority = count[1] > count[0]
 
-        if positive_is_majority:
-            true = 1 - np.array(true)
-            pred = 1 - np.array(pred)
+            if positive_is_majority:
+                true = 1 - np.array(true)
+                pred = 1 - np.array(pred)
 
-        thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
+            thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
 
-        self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC')
+            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC')
 
-        if positive_is_majority:
-            self.threshold = 1 - self.threshold
+            if positive_is_majority:
+                self.threshold = 1 - self.threshold
+        else:
+            with open(self.threshold_file_name(), "r") as f:
+                self.threshold = float(f.read()) 
 
     def plot_confusion_matrix(self, ground_truth, Y_predicted, normalized=True):
         confusion_mat = confusion_matrix(y_true=ground_truth, y_pred=Y_predicted)
@@ -487,14 +500,14 @@ class LocalizationClassifier():
         plt.show()
 
     def save_model(self):
-        self.magik_architecture.save_weights(self.model_file_name('h5'))
+        self.magik_architecture.save_weights(self.model_file_name())
 
-        with open(self.model_file_name('bin'), "w") as f:
+        with open(self.threshold_file_name(), "w") as f:
             f.write(str(self.threshold))
         
     def load_model(self):
         self.build_network()
-        self.magik_architecture.load_weights(self.model_file_name('h5'))
+        self.magik_architecture.load_weights(self.model_file_name())
 
-        with open(self.model_file_name('bin'), "r") as f:
+        with open(self.threshold_file_name(), "r") as f:
             self.threshold = float(f.read())
