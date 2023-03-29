@@ -231,17 +231,21 @@ class LocalizationClassifier():
             (nfsolution, efsolution, global_property),
             (nodesets, edgesets, framesets)
         )
-
+    
+    @property
     def train_full_graph_file_name(self):
         return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.tmp"
 
+    @property
     def model_file_name(self):
         return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.h5"
 
+    @property
     def threshold_file_name(self):
         return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.bin"
 
-    def raw_predictions_file_name(self):
+    @property
+    def predictions_file_name(self):
         return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv"
 
     def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False):
@@ -257,7 +261,7 @@ class LocalizationClassifier():
             pd.DataFrame({
                 'true': true,
                 'pred': pred
-            }).to_csv(self.raw_predictions_file_name(), index=False)
+            }).to_csv(self.predictions_file_name, index=False)
 
         if plot:
             self.plot_confusion_matrix(true, pred)
@@ -265,19 +269,19 @@ class LocalizationClassifier():
         return true, pred
 
     def fit_with_datasets_from_path(self, path):
-        if os.path.exists(self.train_full_graph_file_name()):
-            fileObj = open(self.train_full_graph_file_name(), 'rb')
+        if os.path.exists(self.train_full_graph_file_name):
+            fileObj = open(self.train_full_graph_file_name, 'rb')
             train_full_graph = pickle.load(fileObj)
             fileObj.close()
         else:
             train_full_graph = self.build_graph(self.get_datasets_from_path(path))
-            fileObj = open(self.train_full_graph_file_name(), 'wb')
+            fileObj = open(self.train_full_graph_file_name, 'wb')
             pickle.dump(train_full_graph, fileObj)
             fileObj.close()
 
         self.build_network()
 
-        if not os.path.exists(self.model_file_name()):
+        if not os.path.exists(self.model_file_name):
 
             def CustomGetSubSet():
                 def inner(data):
@@ -453,15 +457,15 @@ class LocalizationClassifier():
             del generator
 
         else:
-            self.magik_architecture.load_weights(self.model_file_name())
+            self.magik_architecture.load_weights(self.model_file_name)
 
         del train_full_graph
 
-        if not os.path.exists(self.threshold_file_name()):
+        if not os.path.exists(self.threshold_file_name):
             true = []
             pred = []
 
-            true, pred = self.test_with_datasets_from_path(apply_threshold=False, save_result=True)
+            true, pred = self.test_with_datasets_from_path(path, apply_threshold=False, save_result=True)
 
             count = Counter(true)
             positive_is_majority = count[1] > count[0]
@@ -477,7 +481,7 @@ class LocalizationClassifier():
             if positive_is_majority:
                 self.threshold = 1 - self.threshold
         else:
-            with open(self.threshold_file_name(), "r") as f:
+            with open(self.threshold_file_name, "r") as f:
                 self.threshold = float(f.read()) 
 
     def plot_confusion_matrix(self, ground_truth, Y_predicted, normalized=True):
@@ -500,14 +504,14 @@ class LocalizationClassifier():
         plt.show()
 
     def save_model(self):
-        self.magik_architecture.save_weights(self.model_file_name())
+        self.magik_architecture.save_weights(self.model_file_name)
 
-        with open(self.threshold_file_name(), "w") as f:
+        with open(self.threshold_file_name, "w") as f:
             f.write(str(self.threshold))
         
     def load_model(self):
         self.build_network()
-        self.magik_architecture.load_weights(self.model_file_name())
+        self.magik_architecture.load_weights(self.model_file_name)
 
-        with open(self.threshold_file_name(), "r") as f:
+        with open(self.threshold_file_name, "r") as f:
             self.threshold = float(f.read())
