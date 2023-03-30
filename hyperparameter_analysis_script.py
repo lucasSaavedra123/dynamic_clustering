@@ -1,7 +1,5 @@
 from LocalizationClassifier import LocalizationClassifier
 from CONSTANTS import *
-import pandas as pd
-
 
 #Hyperparameter Analysis
 for radius in LocalizationClassifier.analysis_hyperparameters['radius']:
