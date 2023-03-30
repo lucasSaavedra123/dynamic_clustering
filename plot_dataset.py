@@ -1,5 +1,8 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+import numpy as np
 
 from CONSTANTS import *
 
@@ -26,6 +29,7 @@ parser.add_argument("-s", "--save_plots", default=False, dest="save_plots", acti
 parser.add_argument("-r", "--filter", default=False, dest="filter", action=BooleanOptionalAction)
 parser.add_argument("-b", "--binary_clustering", default=False, dest="binary_clustering", action=BooleanOptionalAction)
 parser.add_argument("-p", "--predicted", default=False, dest="predicted", action=BooleanOptionalAction)
+parser.add_argument("-a", "--show_confusion_matrix", default=None, dest="show_confusion_matrix", action=BooleanOptionalAction)
 parser.add_argument("-mn", "--min_frame", default=None, dest="min_frame")
 parser.add_argument("-mx", "--max_frame", default=None, dest="max_frame")
 
@@ -37,6 +41,13 @@ if args.min_frame is not None and args.max_frame is not None:
     dataset = dataset[int(args.min_frame) < dataset[FRAME_COLUMN_NAME]]
     dataset = dataset[dataset[FRAME_COLUMN_NAME] < int(args.max_frame)]
 
+dataset = dataset.rename(columns={
+    MAGIK_X_POSITION_COLUMN_NAME: X_POSITION_COLUMN_NAME,
+    MAGIK_Y_POSITION_COLUMN_NAME: Y_POSITION_COLUMN_NAME,
+    MAGIK_LABEL_COLUMN_NAME: CLUSTERIZED_COLUMN_NAME,
+    MAGIK_LABEL_COLUMN_NAME_PREDICTED: CLUSTERIZED_COLUMN_NAME+"_predicted",
+})
+
 print(f"Average: {len(dataset)/max(dataset[FRAME_COLUMN_NAME])}")
 
 projection = args.dimension
@@ -44,6 +55,7 @@ with_clustering = args.with_clustering
 filter_flag = args.filter
 binary_clustering = args.binary_clustering
 predicted = args.predicted
+show_confusion_matrix = args.show_confusion_matrix
 
 if with_clustering:
     if predicted and binary_clustering:
@@ -106,3 +118,20 @@ if projection == '2d' or args.save_plots:
         plt.savefig(f"{args.filename}_3d.jpg")
     else:
         plt.show()
+
+if show_confusion_matrix:
+    confusion_mat = confusion_matrix(y_true=dataset[CLUSTERIZED_COLUMN_NAME].values.tolist(), y_pred=dataset[CLUSTERIZED_COLUMN_NAME+"_predicted"].values.tolist())
+    confusion_mat = confusion_mat.astype('float') / confusion_mat.sum(axis=1)[:, np.newaxis]
+
+    labels = ["Non-Clusterized", "Clusterized"]
+
+    confusion_matrix_dataframe = pd.DataFrame(data=confusion_mat, index=labels, columns=labels)
+    sns.set(font_scale=1.5)
+    color_map = sns.color_palette(palette="Blues", n_colors=7)
+    sns.heatmap(data=confusion_matrix_dataframe, annot=True, annot_kws={"size": 15}, cmap=color_map)
+
+    plt.title(f'Confusion Matrix')
+    plt.rcParams.update({'font.size': 15})
+    plt.ylabel("Ground truth", fontsize=15)
+    plt.xlabel("Predicted label", fontsize=15)
+    plt.show()

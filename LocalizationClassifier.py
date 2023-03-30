@@ -35,9 +35,9 @@ class LocalizationClassifier():
     @classmethod
     def analysis_hyperparameters(cls):
         return {
-            "learning_rate": [0.1, 0.01, 0.001],
-            "radius": [0.01, 0.025, 0.05, 0.1, 0.25],
-            "nofframes": [3, 5, 7, 9, 11],
+            #"learning_rate": [0.01, 0.001, 0.001],
+            "radius": [0.05, 0.1, 0.25],
+            "nofframes": [11,13,15,17,19,21],
             "batch_size": [1,2,4]
         }
 
@@ -247,12 +247,16 @@ class LocalizationClassifier():
     def predictions_file_name(self):
         return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv"
 
-    def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False):
+    def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False):
         true = []
         pred = []
 
         for csv_file_name in self.get_dataset_file_paths_from(path):
             r = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=apply_threshold)
+
+            if save_predictions:
+                r.to_csv(csv_file_name+f"_predicted_with_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
+
             true += r[MAGIK_LABEL_COLUMN_NAME].values.tolist()
             pred += r[MAGIK_LABEL_COLUMN_NAME_PREDICTED].values.tolist()
 
