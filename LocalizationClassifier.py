@@ -29,7 +29,7 @@ class LocalizationClassifier():
             "radius": 0.05,
             "nofframes": 11,
             "partition_size": 100,
-            "epochs": 10,
+            "epochs": 25,
             "batch_size": 4,
         }
 
@@ -37,9 +37,9 @@ class LocalizationClassifier():
     def analysis_hyperparameters(cls):
         return {
             #"learning_rate": [0.01, 0.001, 0.001],
-            "radius": [0.05, 0.1, 0.25],
+            "radius": [0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2],
             "nofframes": [11,13,15,17,19,21],
-            "batch_size": [4,2,1]
+            "batch_size": [1,2,4,8]
         }
 
     def __init__(self, height=10, width=10):
@@ -326,8 +326,8 @@ class LocalizationClassifier():
                 def inner(data):
                     graph, labels, sets = data
 
-                    min_num_nodes = 2000
-                    max_num_nodes = 2500
+                    min_num_nodes = 1500
+                    max_num_nodes = 3000
 
                     num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
 
@@ -344,7 +344,6 @@ class LocalizationClassifier():
                     edge_labels = labels[1][~edge_connects_removed_node]
                     global_labels = labels[2]
 
-
                     return (node_features, edge_features, edge_connections, weights), (
                         node_labels,
                         edge_labels,
@@ -353,6 +352,7 @@ class LocalizationClassifier():
 
                 return inner
 
+            """
             def CustomDatasetBalancing():
                 def inner(data):
                     graph, labels = data
@@ -361,10 +361,12 @@ class LocalizationClassifier():
                     number_of_non_clusterized_nodes = np.sum(np.array(labels[0][:, 0] == 0) * 1)
 
                     if number_of_clusterized_nodes > number_of_non_clusterized_nodes:
+                        graph, labels = data
                         nodeidxs = np.array(np.where(labels[0][:, 0] == 1)[0])
 
                         nodes_to_select = np.random.choice(nodeidxs, size=number_of_non_clusterized_nodes, replace=False)
                         nodes_to_select = np.append(nodes_to_select, np.array(np.where(labels[0][:, 0] == 0)[0]))
+                        nodes_to_select = sorted(nodes_to_select)
 
                         id_to_new_id = {}
 
@@ -375,16 +377,16 @@ class LocalizationClassifier():
 
                         node_features = graph[0][nodes_to_select]
                         edge_features = graph[1][~edge_connects_removed_node]
-                        edge_connections = graph[2][~edge_connects_removed_node]
-
-                        edge_connections = np.vectorize(id_to_new_id.get)(edge_connections)
-
+                        edge_connections = np.vectorize(id_to_new_id.get)(graph[2][~edge_connects_removed_node])
                         weights = graph[3][~edge_connects_removed_node]
 
                         node_labels = labels[0][nodes_to_select]
                         edge_labels = labels[1][~edge_connects_removed_node]
                         global_labels = labels[2]
-    
+
+
+                        #print(np.array(node_features).shape, np.array(edge_features).shape, np.array(edge_connections).shape, np.array(weights).shape, np.array(node_labels).shape, np.array(edge_labels).shape, np.array(global_labels).shape)
+
                         return (node_features, edge_features, edge_connections, weights), (
                             node_labels,
                             edge_labels,
@@ -394,8 +396,9 @@ class LocalizationClassifier():
                         return graph, labels
 
                 return inner
+            """
 
-            def AugmentCentroids(rotate, flip_x, flip_y):
+            def CustomAugmentCentroids(rotate, flip_x, flip_y):
                 def inner(data):
                     graph, labels = data
 
@@ -430,7 +433,7 @@ class LocalizationClassifier():
                     >> dt.Lambda(CustomGetSubGraph)
                     #>> dt.Lambda(CustomDatasetBalancing)
                     >> dt.Lambda(
-                        AugmentCentroids,
+                        CustomAugmentCentroids,
                         rotate=lambda: np.random.rand() * 2 * np.pi,
                         flip_x=lambda: np.random.randint(2),
                         flip_y=lambda: np.random.randint(2),

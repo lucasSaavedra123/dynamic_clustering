@@ -1,5 +1,7 @@
 from LocalizationClassifier import LocalizationClassifier
 
+print("Number of Hyperparameter Combinations:", len(LocalizationClassifier.analysis_hyperparameters()['radius']) * len(LocalizationClassifier.analysis_hyperparameters()['nofframes']) * len(LocalizationClassifier.analysis_hyperparameters()['batch_size']))
+
 #Hyperparameter Analysis
 for radius in LocalizationClassifier.analysis_hyperparameters()['radius']:
     for nofframes in LocalizationClassifier.analysis_hyperparameters()['nofframes']:
@@ -13,3 +15,4 @@ for radius in LocalizationClassifier.analysis_hyperparameters()['radius']:
             classifier.fit_with_datasets_from_path('./datasets_shuffled/train')
             classifier.save_model()
             classifier.test_with_datasets_from_path('./datasets_shuffled/test', apply_threshold=True, save_result=True, save_predictions=True)
+            exit()
