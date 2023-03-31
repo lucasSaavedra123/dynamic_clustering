@@ -16,6 +16,7 @@ import tensorflow as tf
 import numpy as np
 import pandas as pd
 import ghostml
+import json
 
 from CONSTANTS import *
 
@@ -28,7 +29,7 @@ class LocalizationClassifier():
             "radius": 0.05,
             "nofframes": 11,
             "partition_size": 100,
-            "epochs": 5,
+            "epochs": 10,
             "batch_size": 4,
         }
 
@@ -38,13 +39,14 @@ class LocalizationClassifier():
             #"learning_rate": [0.01, 0.001, 0.001],
             "radius": [0.05, 0.1, 0.25],
             "nofframes": [11,13,15,17,19,21],
-            "batch_size": [1,2,4]
+            "batch_size": [4,2,1]
         }
 
     def __init__(self, height=10, width=10):
         self._output_type = "nodes"
 
         self.magik_architecture = None
+        self.history_training_info = None
         self.threshold = 0.5
 
         self.hyperparameters = self.__class__.default_hyperparameters()
@@ -72,8 +74,7 @@ class LocalizationClassifier():
 
         self.magik_architecture.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=self.hyperparameters['learning_rate']),
-            #loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
-            loss="mse",
+            loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
             metrics=['accuracy', tf.keras.metrics.AUC()]
         )
 
@@ -113,7 +114,7 @@ class LocalizationClassifier():
         return self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(path), set_number=set_number)
 
     def get_dataset_file_paths_from(self, path):
-        return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv")]
+        return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
 
     def get_datasets_from_path(self, path):
         full_dataset = pd.DataFrame({})
@@ -123,17 +124,21 @@ class LocalizationClassifier():
 
         return full_dataset.reset_index(drop=True)
 
-    def predict(self, magik_dataset, apply_threshold=True):
+    def predict(self, magik_dataset, apply_threshold=True, verbose=True):
         magik_dataset = magik_dataset.copy()
 
-        for frame_index in range(0, max(magik_dataset[FRAME_COLUMN_NAME]), self.hyperparameters["partition_size"]):
+        frames_indexes = list(range(0, max(magik_dataset[FRAME_COLUMN_NAME]), self.hyperparameters["partition_size"]))
+
+        iterator = tqdm.tqdm(frames_indexes) if verbose else frames_indexes
+
+        for frame_index in iterator:
             aux_magik_dataset = magik_dataset[magik_dataset[FRAME_COLUMN_NAME] < frame_index + self.hyperparameters["partition_size"]]
             aux_magik_dataset = aux_magik_dataset[frame_index <= aux_magik_dataset[FRAME_COLUMN_NAME]]
             aux_magik_dataset[FRAME_COLUMN_NAME] = aux_magik_dataset[FRAME_COLUMN_NAME] - frame_index
             original_index = aux_magik_dataset.index
             aux_magik_dataset = aux_magik_dataset.copy().reset_index(drop=True)
 
-            grapht = self.build_graph(aux_magik_dataset)
+            grapht = self.build_graph(aux_magik_dataset, verbose=False)
 
             v = [
                 grapht[0][0].reshape(1, grapht[0][0].shape[0], grapht[0][0].shape[1]),
@@ -166,10 +171,7 @@ class LocalizationClassifier():
 
         sets = np.unique(full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME])
 
-        if verbose:
-            iterator = tqdm.tqdm(sets)
-        else:
-            iterator = sets
+        iterator = tqdm.tqdm(sets) if verbose else sets
 
         for setid in iterator:
             df_set = full_nodes_dataset[full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index()
@@ -233,7 +235,7 @@ class LocalizationClassifier():
     
     @property
     def train_full_graph_file_name(self):
-        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.tmp"
+        return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.tmp"
 
     @property
     def model_file_name(self):
@@ -246,16 +248,22 @@ class LocalizationClassifier():
     @property
     def predictions_file_name(self):
         return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv"
+    
+    @property
+    def history_training_info_file_name(self):
+        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.json"
 
-    def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False):
+    def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True):
         true = []
         pred = []
 
-        for csv_file_name in self.get_dataset_file_paths_from(path):
-            r = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=apply_threshold)
+        iterator = tqdm.tqdm(self.get_dataset_file_paths_from(path)) if verbose else self.get_dataset_file_paths_from(path)
+
+        for csv_file_name in iterator:
+            r = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=apply_threshold, verbose=False)
 
             if save_predictions:
-                r.to_csv(csv_file_name+f"_predicted_with_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
+                r.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
 
             true += r[MAGIK_LABEL_COLUMN_NAME].values.tolist()
             pred += r[MAGIK_LABEL_COLUMN_NAME_PREDICTED].values.tolist()
@@ -284,8 +292,7 @@ class LocalizationClassifier():
 
         self.build_network()
 
-        if not os.path.exists(self.model_file_name):
-
+        if self.load_keras_model() is None:
             def CustomGetSubSet():
                 def inner(data):
                     graph, labels, sets = data
@@ -305,19 +312,13 @@ class LocalizationClassifier():
                     edge_labels = labels[1][edgeidxs]
                     glob_labels = labels[2][randset]
 
-                    #node_sets = sets[0][nodeidxs]
-                    #edge_sets = sets[1][edgeidxs]
-
-                    #node_sets[:,0] = 0
-                    #edge_sets[:,0] = 0
-
                     frame_sets = sets[2][nodeidxs]
 
                     return (node_features, edge_features, edge_connections, weights), (
                         node_labels,
                         edge_labels,
                         glob_labels,
-                    ), (frame_sets) #, (node_sets, edge_sets, frame_sets)
+                    ), (frame_sets)
 
                 return inner
 
@@ -325,8 +326,8 @@ class LocalizationClassifier():
                 def inner(data):
                     graph, labels, sets = data
 
-                    min_num_nodes = 500
-                    max_num_nodes = 750
+                    min_num_nodes = 2000
+                    max_num_nodes = 2500
 
                     num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
 
@@ -342,6 +343,7 @@ class LocalizationClassifier():
                     node_labels = labels[0][node_start : node_start + num_nodes]
                     edge_labels = labels[1][~edge_connects_removed_node]
                     global_labels = labels[2]
+
 
                     return (node_features, edge_features, edge_connections, weights), (
                         node_labels,
@@ -455,20 +457,18 @@ class LocalizationClassifier():
             generator = ContinuousGraphGenerator(CustomGetFeature(train_full_graph, **magik_variables.properties()), **args)
 
             with generator:
-                self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"])
-           
-            del generator
+                self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
 
-        else:
-            self.magik_architecture.load_weights(self.model_file_name)
+            del generator
 
         del train_full_graph
 
-        if not os.path.exists(self.threshold_file_name):
+        if self.load_threshold() is None:
+            print("Running Ghost...")
             true = []
             pred = []
 
-            true, pred = self.test_with_datasets_from_path(path, apply_threshold=False, save_result=True)
+            true, pred = self.test_with_datasets_from_path(path, apply_threshold=False, save_result=False, verbose=True)
 
             count = Counter(true)
             positive_is_majority = count[1] > count[0]
@@ -483,9 +483,6 @@ class LocalizationClassifier():
 
             if positive_is_majority:
                 self.threshold = 1 - self.threshold
-        else:
-            with open(self.threshold_file_name, "r") as f:
-                self.threshold = float(f.read()) 
 
     def plot_confusion_matrix(self, ground_truth, Y_predicted, normalized=True):
         confusion_mat = confusion_matrix(y_true=ground_truth, y_pred=Y_predicted)
@@ -506,15 +503,50 @@ class LocalizationClassifier():
         plt.xlabel("Predicted label", fontsize=15)
         plt.show()
 
+    def save_threshold(self):
+        with open(self.threshold_file_name, "w") as threshold_file:
+            threshold_file.write(str(self.threshold))
+
+    def save_history_training_info(self):
+        with open(self.history_training_info_file_name, "w") as json_file:
+            json.dump(self.history_training_info, json_file)
+
     def save_model(self):
+        self.save_keras_model()
+        self.save_threshold()
+        self.save_history_training_info()
+
+    def save_keras_model(self):
         self.magik_architecture.save_weights(self.model_file_name)
 
-        with open(self.threshold_file_name, "w") as f:
-            f.write(str(self.threshold))
-        
-    def load_model(self):
-        self.build_network()
-        self.magik_architecture.load_weights(self.model_file_name)
+    def load_threshold(self):
+        try:
+            with open(self.threshold_file_name, "r") as threshold_file:
+                self.threshold = float(threshold_file.read())
+        except FileNotFoundError:
+            return None
 
-        with open(self.threshold_file_name, "r") as f:
-            self.threshold = float(f.read())
+        return self.threshold
+
+    def load_history_training_info(self):
+        try:
+            with open(self.history_training_info_file_name, "r") as json_file:
+                self.history_training_info = json.load(json_file)
+        except FileNotFoundError:
+            return None
+
+        return self.history_training_info
+
+    def load_keras_model(self):
+        try:
+            self.build_network()
+            self.magik_architecture.load_weights(self.model_file_name)
+        except FileNotFoundError:
+            return None
+
+        return self.magik_architecture
+
+    def load_model(self):
+        self.load_keras_model()
+        self.load_threshold()
+        self.load_history_training_info()

@@ -98,7 +98,7 @@ if projection == '3d' or args.save_plots:
     ax.set_zlabel('y[um]')
 
     if args.save_plots:
-        plt.savefig(f"{args.filename}.jpg")
+        plt.savefig(f"{args.filename}_3d.jpg")
     else:
         plt.show()
 
@@ -115,13 +115,16 @@ if projection == '2d' or args.save_plots:
     ax.set_ylabel('y[um]')
 
     if args.save_plots:
-        plt.savefig(f"{args.filename}_3d.jpg")
+        plt.savefig(f"{args.filename}_2d.jpg")
     else:
         plt.show()
 
 if show_confusion_matrix:
     confusion_mat = confusion_matrix(y_true=dataset[CLUSTERIZED_COLUMN_NAME].values.tolist(), y_pred=dataset[CLUSTERIZED_COLUMN_NAME+"_predicted"].values.tolist())
     confusion_mat = confusion_mat.astype('float') / confusion_mat.sum(axis=1)[:, np.newaxis]
+
+    if confusion_mat.shape == (1,1):
+        confusion_mat = np.array([[1, 0], [0, 0]])
 
     labels = ["Non-Clusterized", "Clusterized"]
 
@@ -134,4 +137,8 @@ if show_confusion_matrix:
     plt.rcParams.update({'font.size': 15})
     plt.ylabel("Ground truth", fontsize=15)
     plt.xlabel("Predicted label", fontsize=15)
-    plt.show()
+
+    if args.save_plots:
+        plt.savefig(f"{args.filename}_confusion_matrix.jpg")
+    else:
+        plt.show()

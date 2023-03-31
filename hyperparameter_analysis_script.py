@@ -1,9 +1,9 @@
 from LocalizationClassifier import LocalizationClassifier
 
 #Hyperparameter Analysis
-for radius in LocalizationClassifier.analysis_hyperparameters['radius']:
-    for nofframes in LocalizationClassifier.analysis_hyperparameters['nofframes']:
-        for batch_size in LocalizationClassifier.analysis_hyperparameters['batch_size']:
+for radius in LocalizationClassifier.analysis_hyperparameters()['radius']:
+    for nofframes in LocalizationClassifier.analysis_hyperparameters()['nofframes']:
+        for batch_size in LocalizationClassifier.analysis_hyperparameters()['batch_size']:
             classifier = LocalizationClassifier(10,10)
 
             classifier.hyperparameters['radius'] = radius
