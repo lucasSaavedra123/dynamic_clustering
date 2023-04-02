@@ -1,3 +1,5 @@
+from keras import backend as K
+
 from LocalizationClassifier import LocalizationClassifier
 
 print("Number of Hyperparameter Combinations:", len(LocalizationClassifier.analysis_hyperparameters()['radius']) * len(LocalizationClassifier.analysis_hyperparameters()['nofframes']) * len(LocalizationClassifier.analysis_hyperparameters()['batch_size']))
@@ -6,6 +8,8 @@ print("Number of Hyperparameter Combinations:", len(LocalizationClassifier.analy
 for radius in LocalizationClassifier.analysis_hyperparameters()['radius']:
     for nofframes in LocalizationClassifier.analysis_hyperparameters()['nofframes']:
         for batch_size in LocalizationClassifier.analysis_hyperparameters()['batch_size']:
+            K.clear_session()
+
             classifier = LocalizationClassifier(10,10)
 
             classifier.hyperparameters['radius'] = radius

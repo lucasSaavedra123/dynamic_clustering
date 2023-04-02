@@ -147,10 +147,11 @@ class LocalizationClassifier():
                 grapht[0][3].reshape(1, grapht[0][3].shape[0], grapht[0][3].shape[1]),
             ]
 
-            if apply_threshold:
-                magik_dataset.loc[original_index,MAGIK_LABEL_COLUMN_NAME_PREDICTED] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...]
-            else:
-                magik_dataset.loc[original_index,MAGIK_LABEL_COLUMN_NAME_PREDICTED] = (self.magik_architecture(v).numpy())[0, ...]
+            with tf.device('/cpu:0'):
+                if apply_threshold:
+                    magik_dataset.loc[original_index,MAGIK_LABEL_COLUMN_NAME_PREDICTED] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...]
+                else:
+                    magik_dataset.loc[original_index,MAGIK_LABEL_COLUMN_NAME_PREDICTED] = (self.magik_architecture(v).numpy())[0, ...]
 
         if apply_threshold:
             magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int)
@@ -290,9 +291,8 @@ class LocalizationClassifier():
             pickle.dump(train_full_graph, fileObj)
             fileObj.close()
 
-        self.build_network()
-
         if self.load_keras_model() is None:
+
             def CustomGetSubSet():
                 def inner(data):
                     graph, labels, sets = data
@@ -326,8 +326,8 @@ class LocalizationClassifier():
                 def inner(data):
                     graph, labels, sets = data
 
-                    min_num_nodes = 1500
-                    max_num_nodes = 3000
+                    min_num_nodes = 1000
+                    max_num_nodes = 1500
 
                     num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
 
@@ -459,8 +459,9 @@ class LocalizationClassifier():
 
             generator = ContinuousGraphGenerator(CustomGetFeature(train_full_graph, **magik_variables.properties()), **args)
 
-            with generator:
-                self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
+            with tf.device('/gpu:0'):
+                with generator:
+                    self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
 
             del generator
 
