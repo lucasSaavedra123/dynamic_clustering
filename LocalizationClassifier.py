@@ -39,7 +39,7 @@ class LocalizationClassifier():
             #"learning_rate": [0.01, 0.001, 0.001],
             "radius": [0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2],
             "nofframes": [11,13,15,17,19,21],
-            "batch_size": [1,2,4,8]
+            "batch_size": [1,2,4]
         }
 
     def __init__(self, height=10, width=10):
