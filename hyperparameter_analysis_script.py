@@ -28,7 +28,6 @@ for radius in LocalizationClassifier.analysis_hyperparameters()['radius']:
 
             classifier = LocalizationClassifier(10,10)
 
-
             classifier.hyperparameters['radius'] = radius
             classifier.hyperparameters['nofframes'] = nofframes
             classifier.hyperparameters['batch_size'] = batch_size
