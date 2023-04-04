@@ -4,13 +4,15 @@ import pandas as pd
 from keras import backend as K
 
 from LocalizationClassifier import LocalizationClassifier
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, f1_score
+
 
 print("Number of Hyperparameter Combinations:", len(LocalizationClassifier.analysis_hyperparameters()['radius']) * len(LocalizationClassifier.analysis_hyperparameters()['nofframes']) * len(LocalizationClassifier.analysis_hyperparameters()['batch_size']))
 
 results = pd.DataFrame({
     'pos_accuracy': [],
     'neg_accuracy': [],
+    'f1-score': [],
     'batch_size': [],
     'radius': [],
     'nofframes': []
@@ -47,21 +49,13 @@ for radius in LocalizationClassifier.analysis_hyperparameters()['radius']:
             if len(true) != 0:
                 tn, fp, fn, tp = confusion_matrix(true, pred).ravel()
 
-                true_negative_rate = tn / (tn + fp)
-                true_positive_rate = tp / (tp + fn)
-
                 results = results.append({
-                    'pos_accuracy': true_positive_rate,
-                    'neg_accuracy': true_negative_rate,
+                    'pos_accuracy': tn / (tn + fp),
+                    'neg_accuracy': tp / (tp + fn),
                     'batch_size': batch_size,
                     'radius': radius,
-                    'nofframes': nofframes
+                    'nofframes': nofframes,
+                    'f1-score': f1_score(true, pred)
                 }, ignore_index=True)
 
 results.to_csv('results.csv')
-
-"""
-classifier = LocalizationClassifier(10,10)
-classifier.load_model()
-classifier.predict(classifier.get_dataset_from_path('./data/CDx_mab.csv')).to_csv('./data/CDx_mAb_localization_classifier_result_better_with_ghost_threshold_and_increased_partition_size.csv')
-"""
