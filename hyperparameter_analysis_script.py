@@ -23,6 +23,7 @@ DATASET_PATH = 'datasets_shuffled'
 for radius in LocalizationClassifier.analysis_hyperparameters()['radius']:
     for nofframes in LocalizationClassifier.analysis_hyperparameters()['nofframes']:
         for batch_size in LocalizationClassifier.analysis_hyperparameters()['batch_size']:
+            print(f"Hyperparameter search with radius {radius}, nofframes {nofframes}, and batch size {batch_size}")
             K.clear_session()
 
             classifier = LocalizationClassifier(10,10)
