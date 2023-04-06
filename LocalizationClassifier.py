@@ -254,26 +254,30 @@ class LocalizationClassifier():
     def history_training_info_file_name(self):
         return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.json"
 
-    def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True):
-        true = []
-        pred = []
+    def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True, check_if_predictions_file_name_exists=False):
+        if check_if_predictions_file_name_exists and os.path.exists(self.predictions_file_name):
+            dataframe = pd.read_csv(self.predictions_file_name)
+            true, pred = dataframe['true'].values.tolist(), dataframe['pred'].values.tolist()
+        else:
+            true = []
+            pred = []
 
-        iterator = tqdm.tqdm(self.get_dataset_file_paths_from(path)) if verbose else self.get_dataset_file_paths_from(path)
+            iterator = tqdm.tqdm(self.get_dataset_file_paths_from(path)) if verbose else self.get_dataset_file_paths_from(path)
 
-        for csv_file_name in iterator:
-            r = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=apply_threshold, verbose=False)
+            for csv_file_name in iterator:
+                r = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=apply_threshold, verbose=False)
 
-            if save_predictions:
-                r.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
+                if save_predictions:
+                    r.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
 
-            true += r[MAGIK_LABEL_COLUMN_NAME].values.tolist()
-            pred += r[MAGIK_LABEL_COLUMN_NAME_PREDICTED].values.tolist()
+                true += r[MAGIK_LABEL_COLUMN_NAME].values.tolist()
+                pred += r[MAGIK_LABEL_COLUMN_NAME_PREDICTED].values.tolist()
 
-        if save_result:
-            pd.DataFrame({
-                'true': true,
-                'pred': pred
-            }).to_csv(self.predictions_file_name, index=False)
+            if save_result:
+                pd.DataFrame({
+                    'true': true,
+                    'pred': pred
+                }).to_csv(self.predictions_file_name, index=False)
 
         if plot:
             self.plot_confusion_matrix(true, pred)
@@ -458,10 +462,15 @@ class LocalizationClassifier():
             }
 
             generator = ContinuousGraphGenerator(CustomGetFeature(train_full_graph, **magik_variables.properties()), **args)
-
-            with tf.device('/gpu:0'):
-                with generator:
-                    self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
+            
+            try:
+                with tf.device('/gpu:0'):
+                    with generator:
+                        self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
+            except:
+                with tf.device('/cpu:0'):
+                    with generator:
+                        self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
 
             del generator
 

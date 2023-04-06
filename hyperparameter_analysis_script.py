@@ -6,7 +6,6 @@ from keras import backend as K
 from LocalizationClassifier import LocalizationClassifier
 from sklearn.metrics import confusion_matrix, f1_score
 
-
 print("Number of Hyperparameter Combinations:", len(LocalizationClassifier.analysis_hyperparameters()['radius']) * len(LocalizationClassifier.analysis_hyperparameters()['nofframes']) * len(LocalizationClassifier.analysis_hyperparameters()['batch_size']))
 
 results = pd.DataFrame({
@@ -34,7 +33,7 @@ for radius in LocalizationClassifier.analysis_hyperparameters()['radius']:
 
             classifier.fit_with_datasets_from_path(f'./{DATASET_PATH}/train')
             classifier.save_model()
-            classifier.test_with_datasets_from_path(f'./{DATASET_PATH}/test', apply_threshold=True, save_result=True, save_predictions=True)
+            classifier.test_with_datasets_from_path(f'./{DATASET_PATH}/test', apply_threshold=True, save_result=True, save_predictions=True, check_if_file_exist=True)
 
             true = []
             pred = []
