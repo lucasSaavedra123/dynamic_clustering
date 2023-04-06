@@ -33,7 +33,7 @@ for radius in LocalizationClassifier.analysis_hyperparameters()['radius']:
 
             classifier.fit_with_datasets_from_path(f'./{DATASET_PATH}/train')
             classifier.save_model()
-            classifier.test_with_datasets_from_path(f'./{DATASET_PATH}/test', apply_threshold=True, save_result=True, save_predictions=True, check_if_file_exist=True)
+            classifier.test_with_datasets_from_path(f'./{DATASET_PATH}/test', apply_threshold=True, save_result=True, save_predictions=True, check_if_predictions_file_name_exists=True)
 
             true = []
             pred = []
