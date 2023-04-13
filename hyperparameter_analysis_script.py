@@ -42,8 +42,10 @@ for radius in LocalizationClassifier.analysis_hyperparameters()['radius']:
             for file in os.listdir(f'./{DATASET_PATH}/test/'):
                 if file.endswith(f"_predicted_with_batch_size_{classifier.hyperparameters['batch_size']}_{classifier.hyperparameters['radius']}_nofframes_{classifier.hyperparameters['nofframes']}_partition_{classifier.hyperparameters['partition_size']}.csv"):
                     dataset = classifier.get_dataset_from_path(f'./{DATASET_PATH}/test/{file}')
-                    true += dataset['solution'].values.tolist()
-                    pred += dataset['solution_predicted'].values.tolist()
+
+                    if len(dataset[dataset['solution'] == 1]) != 0:
+                        true += dataset['solution'].values.tolist()
+                        pred += dataset['solution_predicted'].values.tolist()
 
             if len(true) != 0:
                 tn, fp, fn, tp = confusion_matrix(true, pred).ravel()

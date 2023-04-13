@@ -30,7 +30,7 @@ class ClusterEdgeRemover():
             "nofframes": 50, #20
             "partition_size": 50000,
             "epochs": 25,
-            "batch_size": 4,
+            "batch_size": 1,
         }
 
     @classmethod
@@ -55,8 +55,7 @@ class ClusterEdgeRemover():
 
     @property
     def node_features(self):
-        #return [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
-        return [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]
+        return [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
 
     @property
     def edge_features(self):
@@ -89,17 +88,17 @@ class ClusterEdgeRemover():
             CLUSTER_ID_COLUMN_NAME+"_predicted": MAGIK_LABEL_COLUMN_NAME_PREDICTED,
         })
 
-        smlm_dataframe['original_index_for_recovery'] = smlm_dataframe.dataframe.index
+        smlm_dataframe['original_index_for_recovery'] = smlm_dataframe.index
 
-        if MAGIK_LABEL_COLUMN_NAME_PREDICTED in smlm_dataframe.columns:
-            smlm_dataframe = smlm_dataframe[smlm_dataframe[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 1]
+        if 'clusterized_predicted' in smlm_dataframe.columns:
+            smlm_dataframe = smlm_dataframe[smlm_dataframe['clusterized_predicted'] == 1]
         else:
-            smlm_dataframe = smlm_dataframe[smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] == 1]
+            smlm_dataframe = smlm_dataframe[smlm_dataframe['clusterized'] == 1]
 
         smlm_dataframe = smlm_dataframe.drop([CLUSTERIZED_COLUMN_NAME, CLUSTERIZED_COLUMN_NAME+'_predicted', PARTICLE_ID_COLUMN_NAME, "Unnamed: 0"], axis=1, errors="ignore")
         smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] / np.array([self.width, self.height]))
         
-        #smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / smlm_dataframe[TIME_COLUMN_NAME].abs().max()
+        smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / smlm_dataframe[TIME_COLUMN_NAME].abs().max()
         smlm_dataframe[MAGIK_DATASET_COLUMN_NAME] = set_number
         smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(int)
 
@@ -131,12 +130,11 @@ class ClusterEdgeRemover():
         This method is different of the Localization Classifier method
         because there are some datasets for testing that have no clusters
         """
-        file_names = [file_name for file_name in os.listdir(path) if file_name.endswith(".csv")]
         full_dataset = pd.DataFrame({})
         set_index = 0
 
-        for csv_file_name in file_names:
-            set_dataframe = self.get_dataset_from_path(os.path.join(path, csv_file_name), set_number=set_index)
+        for csv_file_path in self.get_dataset_file_paths_from(path):
+            set_dataframe = self.get_dataset_from_path(csv_file_path, set_number=set_index)
 
             if not set_dataframe.empty:
                 full_dataset = full_dataset.append(set_dataframe)
@@ -208,6 +206,7 @@ class ClusterEdgeRemover():
             "same_cluster": []
         })
 
+        """
         #We iterate on all the datasets and we extract all the edges.
         sets = np.unique(full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME])
 
@@ -231,13 +230,13 @@ class ClusterEdgeRemover():
 
             for eps_value in eps_values:
                 if eps_value != 0:
-                    dbscan_result = DBSCAN(eps=eps_value, min_samples=1).fit_predict(df_set[['position-x', 'position-y']])
+                    dbscan_result = DBSCAN(eps=eps_value, min_samples=1).fit_predict(df_set[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]])
 
                     if len(set(dbscan_result)) == 1:
                         break
 
                     if -1 not in dbscan_result:
-                        results[eps_value] = silhouette_score(df_set[['position-x', 'position-y']], dbscan_result)
+                        results[eps_value] = silhouette_score(df_set[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]], dbscan_result)
                         dbscan_results[eps_value] = dbscan_result
 
             selected_eps_value = max(results, key=results.get)
@@ -247,8 +246,8 @@ class ClusterEdgeRemover():
                 # remove excess frames
                 localizations_in_subcluster = np.where(dbscan_result == sub_cluster_id)
                 cluster_df = df_set.loc[localizations_in_subcluster].copy()
-                count = Counter(cluster_df['solution'])
-                if for_predict or (len(cluster_df['solution'].unique()) > 1 and (np.array([count[value] for value in count]) > 10).all()):
+                count = Counter(cluster_df[MAGIK_LABEL_COLUMN_NAME])
+                if for_predict or (len(cluster_df[MAGIK_LABEL_COLUMN_NAME].unique()) > 1 and (np.array([count[value] for value in count]) > 10).all()):
                     cluster_df[MAGIK_DATASET_COLUMN_NAME] = global_sub_cluster_id
                     dbscan_result_by_subcluster_id[global_sub_cluster_id] = selected_eps_value
                     global_sub_cluster_id += 1
@@ -256,6 +255,9 @@ class ClusterEdgeRemover():
 
         original_index = clusters_extracted_from_dbscan.index.to_list()
         clusters_extracted_from_dbscan = clusters_extracted_from_dbscan.reset_index(drop=True)
+        """
+
+        clusters_extracted_from_dbscan = full_nodes_dataset.reset_index(drop=True)
         clusters_extracted_from_dbscan['index'] = clusters_extracted_from_dbscan.index
 
         #We iterate on all the datasets and we extract all the edges.
@@ -268,7 +270,7 @@ class ClusterEdgeRemover():
         
         for setid in iterator:
             new_edges_dataframe = pd.DataFrame({'index_1': [], 'index_2': [],'distance': [], 'same_cluster': []})
-            df_window = clusters_extracted_from_dbscan[clusters_extracted_from_dbscan['set'] == setid].copy().reset_index(drop=True)
+            df_window = clusters_extracted_from_dbscan[clusters_extracted_from_dbscan[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index(drop=True)
             simplices = Delaunay(df_window[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]].values).simplices
 
             def less_first(a, b):
@@ -304,7 +306,7 @@ class ClusterEdgeRemover():
                 simplified_cross = simplified_cross.append(pd.DataFrame({
                     f"{MAGIK_X_POSITION_COLUMN_NAME}_x": [df_window[x_index][f"{MAGIK_X_POSITION_COLUMN_NAME}"].values[0]],
                     f"{MAGIK_X_POSITION_COLUMN_NAME}_y": [df_window[y_index][f"{MAGIK_X_POSITION_COLUMN_NAME}"].values[0]],
-                    f"{MAGIK_X_POSITION_COLUMN_NAME}_x": [df_window[x_index][f"{MAGIK_Y_POSITION_COLUMN_NAME}"].values[0]],
+                    f"{MAGIK_Y_POSITION_COLUMN_NAME}_x": [df_window[x_index][f"{MAGIK_Y_POSITION_COLUMN_NAME}"].values[0]],
                     f"{MAGIK_Y_POSITION_COLUMN_NAME}_y": [df_window[y_index][f"{MAGIK_Y_POSITION_COLUMN_NAME}"].values[0]],
                     'index_x': [edge[0]],
                     'index_y': [edge[1]],
@@ -367,23 +369,23 @@ class ClusterEdgeRemover():
 
     @property
     def train_full_graph_file_name(self):
-        return f"edge_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.tmp"
+        return f"edge_classifier.tmp"
 
     @property
     def model_file_name(self):
-        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.h5"
+        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}.h5"
 
     @property
     def threshold_file_name(self):
-        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.bin"
+        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}.bin"
 
     @property
     def predictions_file_name(self):
-        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv"
+        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}.csv"
     
     @property
     def history_training_info_file_name(self):
-        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.json"
+        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}.json"
 
     def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True):
         true = []
@@ -412,13 +414,13 @@ class ClusterEdgeRemover():
         return true, pred
 
     def fit_with_datasets_from_path(self, path):
-        if os.path.exists(self.model_file_name('tmp')):
-            fileObj = open(self.model_file_name('tmp'), 'rb')
+        if os.path.exists(self.train_full_graph_file_name):
+            fileObj = open(self.train_full_graph_file_name, 'rb')
             train_full_graph = pickle.load(fileObj)
             fileObj.close()
         else:
             train_full_graph = self.build_graph(self.get_datasets_from_path(path))
-            fileObj = open(self.model_file_name('tmp'), 'wb')
+            fileObj = open(self.train_full_graph_file_name, 'wb')
             pickle.dump(train_full_graph, fileObj)
             fileObj.close()
 
@@ -477,9 +479,9 @@ class ClusterEdgeRemover():
 
             def CustomGetSubGraph():
                 def inner(data):
-                    graph, labels, _ = data
+                    graph, labels = data
 
-                    min_num_nodes = 500
+                    min_num_nodes = 2500
                     max_num_nodes = 5000
 
                     retry = True
@@ -555,62 +557,43 @@ class ClusterEdgeRemover():
 
                 return inner
 
-            """
-            def OldCustomGetSubGraph():
+            def CustomAugmentCentroids(rotate, flip_x, flip_y):
                 def inner(data):
-                    graph, labels, framesets = data
+                    graph, labels = data
 
-                    framesets = framesets[:,0]
-                    initial_frame = np.random.choice(np.unique(framesets))
-                    final_frame = initial_frame + self.hyperparameters["partition_size"]
+                    centroids = graph[0][:, :2]
 
-                    if final_frame > np.max(framesets):
-                        final_frame = np.max(framesets)
-                        initial_frame = final_frame - self.hyperparameters["partition_size"]
-
-                    nodeidxs = np.where(np.logical_and(initial_frame <= framesets, framesets < final_frame))
-
-                    #node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
-                    #edge_connects_removed_node = np.any(
-                    #    (graph[2] < node_start) | (graph[2] >= node_start + num_nodes),
-                    #    axis=-1,
-                    #)
-
-                    edge_connects_removed_node = np.any(~np.isin(graph[2], nodeidxs), axis=-1)
-
-                    #node_features = graph[0][node_start : node_start + num_nodes]
-                    node_features = graph[0][nodeidxs]
-                    edge_features = graph[1][~edge_connects_removed_node]
-                    #edge_connections = graph[2][~edge_connects_removed_node] - node_start
-                    edge_connections = graph[2][~edge_connects_removed_node] - np.min(nodeidxs)
-                    weights = graph[3][~edge_connects_removed_node]
-
-                    #node_labels = labels[0][node_start : node_start + num_nodes]
-                    node_labels = labels[0][nodeidxs]
-                    edge_labels = labels[1][~edge_connects_removed_node]
-                    global_labels = labels[2]
-
-                    #print(Counter(np.array(node_labels)))
-
-                    return (node_features, edge_features, edge_connections, weights), (
-                        node_labels,
-                        edge_labels,
-                        global_labels,
+                    centroids = centroids - 0.5
+                    centroids_x = (
+                        centroids[:, 0] * np.cos(rotate)
+                        + centroids[:, 1] * np.sin(rotate)
                     )
+                    centroids_y = (
+                        centroids[:, 1] * np.cos(rotate)
+                        - centroids[:, 0] * np.sin(rotate)
+                    )
+                    if flip_x:
+                        centroids_x *= -1
+                    if flip_y:
+                        centroids_y *= -1
+
+                    node_features = np.array(graph[0])
+                    node_features[:, 0] = centroids_x + 0.5
+                    node_features[:, 1] = centroids_y + 0.5
+
+                    return (node_features, *graph[1:]), labels
 
                 return inner
-            """
 
             def CustomGetFeature(full_graph, **kwargs):
                 return (
                     dt.Value(full_graph)
                     >> dt.Lambda(CustomGetSubSet)
-                    #>> dt.Lambda(CustomGetSubGraph)
-                    #>> dt.Lambda(CustomDatasetBalancing)
+                    >> dt.Lambda(CustomGetSubGraph)
+                    >> dt.Lambda(CustomDatasetBalancing)
                     >> dt.Lambda(
-                        AugmentCentroids,
+                        CustomAugmentCentroids,
                         rotate=lambda: np.random.rand() * 2 * np.pi,
-                        #translate=lambda: np.random.randn(2) * 0.05,
                         translate=lambda: np.random.randn(2) * 0,
                         flip_x=lambda: np.random.randint(2),
                         flip_y=lambda: np.random.randint(2)

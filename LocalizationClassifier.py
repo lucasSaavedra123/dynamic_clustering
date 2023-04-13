@@ -37,8 +37,8 @@ class LocalizationClassifier():
     def analysis_hyperparameters(cls):
         return {
             #"learning_rate": [0.01, 0.001, 0.001],
-            "radius": [0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2],
-            "nofframes": [11,13,15,17,19,21],
+            "radius": [0.05, 0.075, 0.1, 0.125],
+            "nofframes": [1,3,5,7,9],
             "batch_size": [1,2,4]
         }
 
@@ -462,7 +462,7 @@ class LocalizationClassifier():
             }
 
             generator = ContinuousGraphGenerator(CustomGetFeature(train_full_graph, **magik_variables.properties()), **args)
-            
+
             try:
                 with tf.device('/gpu:0'):
                     with generator:
