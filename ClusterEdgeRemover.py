@@ -28,8 +28,8 @@ class ClusterEdgeRemover():
             "learning_rate": 0.001,
             "radius": 0.05,
             "nofframes": 50, #20
-            "partition_size": 50000,
-            "epochs": 25,
+            "partition_size": 10000,
+            "epochs": 1,
             "batch_size": 1,
         }
 
@@ -68,7 +68,7 @@ class ClusterEdgeRemover():
             number_of_node_features=len(self.node_features),
             number_of_edge_features=len(self.edge_features),
             number_of_edge_outputs=1,
-            node_output_activation="sigmoid",
+            edge_output_activation="sigmoid",
             output_type=self._output_type,
         )
 
@@ -143,26 +143,47 @@ class ClusterEdgeRemover():
         return full_dataset.reset_index(drop=True)
 
     def predict(self, magik_dataset, apply_threshold=True, verbose=True):
-
         magik_dataset = magik_dataset.copy()
 
-        grapht, original_index = self.build_graph(magik_dataset, for_predict=True)
+        grapht = self.build_graph(magik_dataset, for_predict=True, verbose=False)
 
-        v = [
-            grapht[0][0].reshape(1, grapht[0][0].shape[0], grapht[0][0].shape[1]),
-            grapht[0][1].reshape(1, grapht[0][1].shape[0], grapht[0][1].shape[1]),
-            grapht[0][2].reshape(1, grapht[0][2].shape[0], grapht[0][2].shape[1]),
-            grapht[0][3].reshape(1, grapht[0][3].shape[0], grapht[0][3].shape[1]),
-        ]
+        predictions = np.empty((len(grapht[0][1]), 1))
 
-        with tf.device('/cpu:0'):
-            if apply_threshold:
-                predictions = (self.magik_architecture(v).numpy() > self.threshold)[0, ...]
-            else:
-                predictions = (self.magik_architecture(v).numpy())[0, ...]
+        number_of_edges = len(grapht[0][2])
+        partitions_initial_index = list(range(0,number_of_edges,self.hyperparameters['partition_size']))
         
-        if apply_threshold:
-            return predictions, grapht[1][1]
+        for index, initial_index in enumerate(partitions_initial_index):
+            if index == len(partitions_initial_index)-1:
+                final_index = number_of_edges
+            else:
+                final_index = partitions_initial_index[index+1]
+
+            considered_edges_features = grapht[0][1][initial_index:final_index]
+            considered_edges = grapht[0][2][initial_index:final_index]
+            considered_edges_weights = grapht[0][3][initial_index:final_index]
+
+            considered_nodes = np.unique(considered_edges.flatten())
+            considered_nodes_features = grapht[0][0][considered_nodes]
+
+            old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
+            considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
+            considered_edges = np.unique(considered_edges, axis=0) # remove duplicates
+
+            v = [
+                considered_nodes_features.reshape(1, considered_nodes_features.shape[0], considered_nodes_features.shape[1]),
+                considered_edges_features.reshape(1, considered_edges_features.shape[0], considered_edges_features.shape[1]),
+                considered_edges.reshape(1, considered_edges.shape[0], considered_edges.shape[1]),
+                considered_edges_weights.reshape(1, considered_edges_weights.shape[0], considered_edges_weights.shape[1]),
+            ]
+
+            with tf.device('/cpu:0'):
+                if apply_threshold:
+                    predictions[initial_index:final_index] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...]
+                else:
+                    predictions[initial_index:final_index] = (self.magik_architecture(v).numpy())[0, ...]
+
+        if not apply_threshold:
+            return grapht[1][1], predictions
 
         edges_to_remove = np.where(predictions == 0)[0]
         remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
@@ -186,10 +207,11 @@ class ClusterEdgeRemover():
 
         magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
+        """
         for index, a_set in enumerate(cluster_sets):
             for value in a_set:
-                magik_dataset.loc[original_index[value], MAGIK_LABEL_COLUMN_NAME_PREDICTED] = index + 1
-        
+                magik_dataset.loc[origina_index[value]l, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = index + 1
+        """
         #magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int)
 
         if MAGIK_LABEL_COLUMN_NAME in magik_dataset.columns:
@@ -354,18 +376,11 @@ class ClusterEdgeRemover():
 
         global_property = np.zeros(np.unique(clusters_extracted_from_dbscan[MAGIK_DATASET_COLUMN_NAME]).shape[0])
 
-        if for_predict:
-            return (
-                (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
-                (nfsolution, efsolution, global_property),
-                (nodesets, edgesets, framesets)
-            ), original_index
-        else:
-            return (
-                (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
-                (nfsolution, efsolution, global_property),
-                (nodesets, edgesets, framesets)
-            )            
+        return (
+            (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
+            (nfsolution, efsolution, global_property),
+            (nodesets, edgesets, framesets)
+        )            
 
     @property
     def train_full_graph_file_name(self):
@@ -399,8 +414,12 @@ class ClusterEdgeRemover():
             if save_predictions:
                 r.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
 
-            true += r[MAGIK_LABEL_COLUMN_NAME].values.tolist()
-            pred += r[MAGIK_LABEL_COLUMN_NAME_PREDICTED].values.tolist()
+            if apply_threshold:
+                true += r[MAGIK_LABEL_COLUMN_NAME].values.tolist()
+                pred += r[MAGIK_LABEL_COLUMN_NAME_PREDICTED].values.tolist()
+            else:
+                true += r[0][:,0].tolist()
+                pred += r[1][:,0].tolist()
 
         if save_result:
             pd.DataFrame({
@@ -423,8 +442,6 @@ class ClusterEdgeRemover():
             fileObj = open(self.train_full_graph_file_name, 'wb')
             pickle.dump(train_full_graph, fileObj)
             fileObj.close()
-
-        self.build_network()
 
         if self.load_keras_model() is None:
 
