@@ -207,12 +207,11 @@ class ClusterEdgeRemover():
 
         magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
-        """
         for index, a_set in enumerate(cluster_sets):
             for value in a_set:
-                magik_dataset.loc[origina_index[value]l, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = index + 1
-        """
-        #magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int)
+                magik_dataset.loc[value, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = index + 1
+
+        magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int)
 
         if MAGIK_LABEL_COLUMN_NAME in magik_dataset.columns:
             magik_dataset[MAGIK_LABEL_COLUMN_NAME] = magik_dataset[MAGIK_LABEL_COLUMN_NAME].astype(int)
@@ -227,57 +226,6 @@ class ClusterEdgeRemover():
             "set": [],
             "same_cluster": []
         })
-
-        """
-        #We iterate on all the datasets and we extract all the edges.
-        sets = np.unique(full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME])
-
-        if verbose:
-            iterator = tqdm.tqdm(sets)
-        else:
-            iterator = sets
-
-        clusters_extracted_from_dbscan = pd.DataFrame({})
-
-        global_sub_cluster_id = 0
-
-        dbscan_result_by_subcluster_id = {}
-
-        for setid in iterator:
-            df_set = full_nodes_dataset[full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index(drop=True)
-            eps_values = np.linspace(0, 1, 100)
-
-            results = {}
-            dbscan_results = {}
-
-            for eps_value in eps_values:
-                if eps_value != 0:
-                    dbscan_result = DBSCAN(eps=eps_value, min_samples=1).fit_predict(df_set[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]])
-
-                    if len(set(dbscan_result)) == 1:
-                        break
-
-                    if -1 not in dbscan_result:
-                        results[eps_value] = silhouette_score(df_set[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]], dbscan_result)
-                        dbscan_results[eps_value] = dbscan_result
-
-            selected_eps_value = max(results, key=results.get)
-            dbscan_result = dbscan_results[selected_eps_value]
-
-            for sub_cluster_id in set(dbscan_result):
-                # remove excess frames
-                localizations_in_subcluster = np.where(dbscan_result == sub_cluster_id)
-                cluster_df = df_set.loc[localizations_in_subcluster].copy()
-                count = Counter(cluster_df[MAGIK_LABEL_COLUMN_NAME])
-                if for_predict or (len(cluster_df[MAGIK_LABEL_COLUMN_NAME].unique()) > 1 and (np.array([count[value] for value in count]) > 10).all()):
-                    cluster_df[MAGIK_DATASET_COLUMN_NAME] = global_sub_cluster_id
-                    dbscan_result_by_subcluster_id[global_sub_cluster_id] = selected_eps_value
-                    global_sub_cluster_id += 1
-                    clusters_extracted_from_dbscan = clusters_extracted_from_dbscan.append(cluster_df, ignore_index=(not for_predict))
-
-        original_index = clusters_extracted_from_dbscan.index.to_list()
-        clusters_extracted_from_dbscan = clusters_extracted_from_dbscan.reset_index(drop=True)
-        """
 
         clusters_extracted_from_dbscan = full_nodes_dataset.reset_index(drop=True)
         clusters_extracted_from_dbscan['index'] = clusters_extracted_from_dbscan.index
@@ -344,7 +292,6 @@ class ClusterEdgeRemover():
             df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
             df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
             df_window['same_cluster'] = (df_window[MAGIK_LABEL_COLUMN_NAME+"_x"] == df_window[MAGIK_LABEL_COLUMN_NAME+"_y"])
-            #df_window = df_window[df_window['distance'] < self.hyperparameters['radius']]
 
             if for_predict or not df_window['same_cluster'].all():
                 edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
@@ -402,35 +349,36 @@ class ClusterEdgeRemover():
     def history_training_info_file_name(self):
         return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}.json"
 
-    def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True):
-        true = []
-        pred = []
+    def test_with_datasets_from_path(self, path, plot=False, save_result=False, save_predictions=False, verbose=True, apply_threshold=True, check_if_predictions_file_name_exists=False):
+        if check_if_predictions_file_name_exists and os.path.exists(self.predictions_file_name):
+            dataframe = pd.read_csv(self.predictions_file_name)
+            true, pred = dataframe['true'].values.tolist(), dataframe['pred'].values.tolist()
+        else:
+            true = []
+            pred = []
 
-        iterator = tqdm.tqdm(self.get_dataset_file_paths_from(path)) if verbose else self.get_dataset_file_paths_from(path)
+            iterator = tqdm.tqdm(self.get_dataset_file_paths_from(path)) if verbose else self.get_dataset_file_paths_from(path)
 
-        for csv_file_name in iterator:
-            r = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=apply_threshold, verbose=False)
+            for csv_file_name in iterator:
+                if save_predictions:
+                    predictions = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=True, verbose=False)
+                    predictions.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
+                if apply_threshold:
+                    result = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=False, verbose=False)
+                    true += result[0][:,0].tolist()
+                    pred += result[1][:,0].tolist()
 
-            if save_predictions:
-                r.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
-
-            if apply_threshold:
-                true += r[MAGIK_LABEL_COLUMN_NAME].values.tolist()
-                pred += r[MAGIK_LABEL_COLUMN_NAME_PREDICTED].values.tolist()
-            else:
-                true += r[0][:,0].tolist()
-                pred += r[1][:,0].tolist()
-
-        if save_result:
-            pd.DataFrame({
-                'true': true,
-                'pred': pred
-            }).to_csv(self.predictions_file_name, index=False)
+            if save_result:
+                pd.DataFrame({
+                    'true': true,
+                    'pred': pred
+                }).to_csv(self.predictions_file_name, index=False)
 
         if plot:
             raise NotImplementedError("Plotting during testing is not implemented yet for Cluster Edge Remover")
 
-        return true, pred
+        if not apply_threshold:
+            return true, pred
 
     def fit_with_datasets_from_path(self, path):
         if os.path.exists(self.train_full_graph_file_name):
@@ -687,14 +635,16 @@ class ClusterEdgeRemover():
         with open(self.threshold_file_name, "w") as threshold_file:
             threshold_file.write(str(self.threshold))
 
+    """
     def save_history_training_info(self):
         with open(self.history_training_info_file_name, "w") as json_file:
             json.dump(self.history_training_info, json_file)
+    """
 
     def save_model(self):
         self.save_keras_model()
         self.save_threshold()
-        self.save_history_training_info()
+        #self.save_history_training_info()
 
     def save_keras_model(self):
         self.magik_architecture.save_weights(self.model_file_name)
@@ -708,6 +658,7 @@ class ClusterEdgeRemover():
 
         return self.threshold
 
+    """
     def load_history_training_info(self):
         try:
             with open(self.history_training_info_file_name, "r") as json_file:
@@ -716,7 +667,8 @@ class ClusterEdgeRemover():
             return None
 
         return self.history_training_info
-
+    """
+        
     def load_keras_model(self):
         try:
             self.build_network()
@@ -729,4 +681,4 @@ class ClusterEdgeRemover():
     def load_model(self):
         self.load_keras_model()
         self.load_threshold()
-        self.load_history_training_info()
+        #self.load_history_training_info()
