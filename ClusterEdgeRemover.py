@@ -26,10 +26,8 @@ class ClusterEdgeRemover():
     def default_hyperparameters(cls):
         return {
             "learning_rate": 0.001,
-            "radius": 0.05,
-            "nofframes": 50, #20
             "partition_size": 10000,
-            "epochs": 1,
+            "epochs": 25,
             "batch_size": 1,
         }
 
@@ -37,9 +35,6 @@ class ClusterEdgeRemover():
     def analysis_hyperparameters(cls):
         return {
             #"learning_rate": [0.1, 0.01, 0.001],
-            #"radius": [0.05, 0.1, 0.25],
-            #"nofframes": [3, 5, 7, 9, 11],
-            #"partition_size": [25, 50, 75, 100],
             "batch_size": [1,2,4]
         }
 
@@ -349,7 +344,7 @@ class ClusterEdgeRemover():
     def history_training_info_file_name(self):
         return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}.json"
 
-    def test_with_datasets_from_path(self, path, plot=False, save_result=False, save_predictions=False, verbose=True, apply_threshold=True, check_if_predictions_file_name_exists=False):
+    def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True, check_if_predictions_file_name_exists=False):
         if check_if_predictions_file_name_exists and os.path.exists(self.predictions_file_name):
             dataframe = pd.read_csv(self.predictions_file_name)
             true, pred = dataframe['true'].values.tolist(), dataframe['pred'].values.tolist()
@@ -362,7 +357,7 @@ class ClusterEdgeRemover():
             for csv_file_name in iterator:
                 if save_predictions:
                     predictions = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=True, verbose=False)
-                    predictions.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
+                    predictions.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
                 if apply_threshold:
                     result = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=False, verbose=False)
                     true += result[0][:,0].tolist()
@@ -567,16 +562,16 @@ class ClusterEdgeRemover():
                 )
 
             magik_variables = dt.DummyFeature(
-                radius=self.hyperparameters["radius"],
+                radius=None,
                 output_type=self._output_type,
-                nofframes=self.hyperparameters["nofframes"],  # time window to associate nodes (in frames)
+                nofframes=None
             )
 
             args = {
                 "batch_function": lambda graph: graph[0],
                 "label_function": lambda graph: graph[1],
                 "min_data_size": 512,
-                "max_data_size": 513,
+                #"max_data_size": 513,
                 "batch_size": self.hyperparameters["batch_size"],
                 "use_multi_inputs": False,
                 **magik_variables.properties(),
