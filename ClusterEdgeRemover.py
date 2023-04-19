@@ -27,7 +27,7 @@ class ClusterEdgeRemover():
         return {
             "learning_rate": 0.001,
             "partition_size": 10000,
-            "epochs": 25,
+            "epochs": 1,
             "batch_size": 1,
         }
 
@@ -137,7 +137,9 @@ class ClusterEdgeRemover():
 
         return full_dataset.reset_index(drop=True)
 
-    def predict(self, magik_dataset, apply_threshold=True, verbose=True):
+    def predict(self, magik_dataset, apply_threshold=True, detect_clusters=True, verbose=True):
+        assert not(not apply_threshold and detect_clusters), 'Cluster Detection cannot be performed without threshold apply'
+
         magik_dataset = magik_dataset.copy()
 
         grapht = self.build_graph(magik_dataset, for_predict=True, verbose=False)
@@ -177,7 +179,7 @@ class ClusterEdgeRemover():
                 else:
                     predictions[initial_index:final_index] = (self.magik_architecture(v).numpy())[0, ...]
 
-        if not apply_threshold:
+        if not detect_clusters:
             return grapht[1][1], predictions
 
         edges_to_remove = np.where(predictions == 0)[0]
@@ -344,7 +346,10 @@ class ClusterEdgeRemover():
     def history_training_info_file_name(self):
         return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}.json"
 
-    def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True, check_if_predictions_file_name_exists=False):
+    def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True, detect_clusters=False, check_if_predictions_file_name_exists=False):
+        assert not (save_predictions and not detect_clusters)
+        assert not (save_result and detect_clusters)
+
         if check_if_predictions_file_name_exists and os.path.exists(self.predictions_file_name):
             dataframe = pd.read_csv(self.predictions_file_name)
             true, pred = dataframe['true'].values.tolist(), dataframe['pred'].values.tolist()
@@ -355,11 +360,12 @@ class ClusterEdgeRemover():
             iterator = tqdm.tqdm(self.get_dataset_file_paths_from(path)) if verbose else self.get_dataset_file_paths_from(path)
 
             for csv_file_name in iterator:
-                if save_predictions:
-                    predictions = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=True, verbose=False)
-                    predictions.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
-                if apply_threshold:
-                    result = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=False, verbose=False)
+                if detect_clusters:
+                    predictions = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=True, verbose=False, detect_clusters=True)
+                    if save_predictions:
+                        predictions.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
+                else:
+                    result = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=apply_threshold, detect_clusters=False, verbose=False)
                     true += result[0][:,0].tolist()
                     pred += result[1][:,0].tolist()
 
@@ -372,7 +378,7 @@ class ClusterEdgeRemover():
         if plot:
             raise NotImplementedError("Plotting during testing is not implemented yet for Cluster Edge Remover")
 
-        if not apply_threshold:
+        if not detect_clusters:
             return true, pred
 
     def fit_with_datasets_from_path(self, path):
@@ -429,6 +435,8 @@ class ClusterEdgeRemover():
                         count = Counter(np.array(edge_labels)[:,0])
                         retry = len(count) == 0 or count[0] == 0 or count[1] == 0
 
+                    #print("CustomGetSubSet", node_features.shape, edge_features.shape, edge_connections.shape, node_labels.shape, edge_labels.shape, glob_labels.shape)
+
                     return (node_features, edge_features, edge_connections, weights), (
                         node_labels,
                         edge_labels,
@@ -442,7 +450,7 @@ class ClusterEdgeRemover():
                     graph, labels = data
 
                     min_num_nodes = 2500
-                    max_num_nodes = 5000
+                    max_num_nodes = 3000
 
                     retry = True
 
@@ -465,6 +473,8 @@ class ClusterEdgeRemover():
 
                         count = Counter(np.array(edge_labels)[:,0])
                         retry = len(np.array(edge_labels)) == 0 or count[0] == 0 or count[1] == 0
+
+                    #print("CustomGetSubGraph", node_features.shape, edge_features.shape, edge_connections.shape, node_labels.shape, edge_labels.shape, global_labels.shape)
 
                     return (node_features, edge_features, edge_connections, weights), (
                         node_labels,
@@ -506,6 +516,8 @@ class ClusterEdgeRemover():
                         node_labels = labels[0][nodes_to_select]
                         edge_labels = labels[1][edges_to_select]
                         global_labels = labels[2]
+
+                        #print("CustomDatasetBalancing", node_features.shape, edge_features.shape, edge_connections.shape, node_labels.shape, edge_labels.shape, global_labels.shape)
 
                         return (node_features, edge_features, edge_connections, weights), (
                             node_labels,
@@ -570,7 +582,7 @@ class ClusterEdgeRemover():
             args = {
                 "batch_function": lambda graph: graph[0],
                 "label_function": lambda graph: graph[1],
-                "min_data_size": 512,
+                "min_data_size": 126,
                 #"max_data_size": 513,
                 "batch_size": self.hyperparameters["batch_size"],
                 "use_multi_inputs": False,
@@ -591,7 +603,7 @@ class ClusterEdgeRemover():
             true = []
             pred = []
 
-            true, pred = self.test_with_datasets_from_path(path, apply_threshold=False, save_result=False, verbose=True)
+            true, pred = self.test_with_datasets_from_path(path, apply_threshold=False, detect_clusters=False, save_result=False, verbose=True)
 
             count = Counter(true)
             positive_is_majority = count[1] > count[0]
@@ -613,14 +625,14 @@ class ClusterEdgeRemover():
         if normalized:
             confusion_mat = confusion_mat.astype('float') / confusion_mat.sum(axis=1)[:, np.newaxis]
 
-        labels = ["Non-Clusterized", "Clusterized"]
+        labels = ["Not Same Cluster", "Same Cluster"]
 
         confusion_matrix_dataframe = pd.DataFrame(data=confusion_mat, index=labels, columns=labels)
         sns.set(font_scale=1.5)
         color_map = sns.color_palette(palette="Blues", n_colors=7)
         sns.heatmap(data=confusion_matrix_dataframe, annot=True, annot_kws={"size": 15}, cmap=color_map)
 
-        plt.title(f'Confusion Matrix')
+        plt.title(f'Confusion Matrix for Edge Classifier')
         plt.rcParams.update({'font.size': 15})
         plt.ylabel("Ground truth", fontsize=15)
         plt.xlabel("Predicted label", fontsize=15)
