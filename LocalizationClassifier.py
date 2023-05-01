@@ -5,6 +5,7 @@ import tqdm
 from operator import is_not
 from functools import partial
 import pickle
+from scipy.spatial import Delaunay
 
 from deeptrack.models.gnns.augmentations import NodeDropout
 from deeptrack.models.gnns.generators import ContinuousGraphGenerator
@@ -29,7 +30,7 @@ class LocalizationClassifier():
             "radius": 0.05,
             "nofframes": 11,
             "partition_size": 100,
-            "epochs": 25,
+            "epochs": 100,
             "batch_size": 4,
         }
 
@@ -175,42 +176,68 @@ class LocalizationClassifier():
         iterator = tqdm.tqdm(sets) if verbose else sets
 
         for setid in iterator:
-            df_set = full_nodes_dataset[full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index()
+            df_window = full_nodes_dataset[full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index()
+            simplices = Delaunay(df_window[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]].values).simplices
 
-            maxframe = range(0, df_set[FRAME_COLUMN_NAME].max() + 1 + self.hyperparameters['nofframes'])
+            def less_first(a, b):
+                return [a,b] if a < b else [b,a]
 
-            windows = mit.windowed(maxframe, n=self.hyperparameters['nofframes'], step=1)
-            windows = map(
-                lambda x: list(filter(partial(is_not, None), x)), windows
-            )
-            windows = list(windows)[:-2]
+            list_of_edges = []
 
-            new_edges_dataframe = pd.DataFrame({'index_1': [], 'index_2': [],'distance': []})
+            for triangle in simplices:
+                for e1, e2 in [[0,1],[1,2],[2,0]]: # for all edges of triangle
+                    list_of_edges.append(less_first(triangle[e1],triangle[e2])) # always lesser index first
 
-            for window in windows:
-                # remove excess frames
-                window = [elem for elem in window if elem <= df_set[FRAME_COLUMN_NAME].max()]
+            new_index_to_old_index = {new_index:df_window.loc[new_index, 'index'] for new_index in df_window.index.values}
+            list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
+            list_of_edges = np.unique(list_of_edges, axis=0).tolist() # remove duplicates
 
-                df_window = df_set[df_set[FRAME_COLUMN_NAME].isin(window)].copy()
-                df_window = df_window.merge(df_window, how='cross')
-                df_window = df_window[df_window['index_x'] != df_window['index_y']]
-                df_window['distance-x'] = df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_y"]
-                df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
-                df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
-                #df_window['distance'] = np.linalg.norm(df_window.loc[:, [f"{MAGIK_X_POSITION_COLUMN_NAME}_x", f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"]].values - df_window.loc[:, [f"{MAGIK_X_POSITION_COLUMN_NAME}_y", f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]].values, axis=1)
-                df_window = df_window[df_window['distance'] < self.hyperparameters['radius']]
+            simplified_cross = pd.DataFrame({
+                f"{MAGIK_X_POSITION_COLUMN_NAME}_x": [],
+                f"{MAGIK_X_POSITION_COLUMN_NAME}_y": [],
+                f"{MAGIK_Y_POSITION_COLUMN_NAME}_x": [],
+                f"{MAGIK_Y_POSITION_COLUMN_NAME}_y": [],
+                'index_x': [],
+                'index_y': [],
+                MAGIK_LABEL_COLUMN_NAME+"_x": [],
+                MAGIK_LABEL_COLUMN_NAME+"_y": [],
+                TIME_COLUMN_NAME+"_x": [],
+                TIME_COLUMN_NAME+"_y": []
+            })
 
-                edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
+            for edge in list_of_edges:
+                x_index = df_window["index"] == edge[0]
+                y_index = df_window["index"] == edge[1]
 
-                new_edges_dataframe = new_edges_dataframe.append(pd.DataFrame({
-                    'index_1': [edge[0] for edge in edges],
-                    'index_2': [edge[1] for edge in edges],
-                    'distance': [value[0] for value in df_window[["distance"]].values.tolist()]
+                simplified_cross = simplified_cross.append(pd.DataFrame({
+                    f"{MAGIK_X_POSITION_COLUMN_NAME}_x": [df_window[x_index][f"{MAGIK_X_POSITION_COLUMN_NAME}"].values[0]],
+                    f"{MAGIK_X_POSITION_COLUMN_NAME}_y": [df_window[y_index][f"{MAGIK_X_POSITION_COLUMN_NAME}"].values[0]],
+                    f"{MAGIK_Y_POSITION_COLUMN_NAME}_x": [df_window[x_index][f"{MAGIK_Y_POSITION_COLUMN_NAME}"].values[0]],
+                    f"{MAGIK_Y_POSITION_COLUMN_NAME}_y": [df_window[y_index][f"{MAGIK_Y_POSITION_COLUMN_NAME}"].values[0]],
+                    'index_x': [edge[0]],
+                    'index_y': [edge[1]],
+                    MAGIK_LABEL_COLUMN_NAME+"_x": [df_window[x_index][f"{MAGIK_LABEL_COLUMN_NAME}"].values[0]],
+                    MAGIK_LABEL_COLUMN_NAME+"_y": [df_window[y_index][f"{MAGIK_LABEL_COLUMN_NAME}"].values[0]],
+                    TIME_COLUMN_NAME+"_x": [df_window[x_index][f"{TIME_COLUMN_NAME}"].values[0]],
+                    TIME_COLUMN_NAME+"_y": [df_window[y_index][f"{TIME_COLUMN_NAME}"].values[0]],
                 }), ignore_index=True)
 
-            new_edges_dataframe = new_edges_dataframe.drop_duplicates()
-            new_edges_dataframe[MAGIK_DATASET_COLUMN_NAME] = setid
-            edges_dataframe = edges_dataframe.append(new_edges_dataframe, ignore_index=True)
+            df_window = simplified_cross.copy()
+            df_window = df_window[df_window['index_x'] != df_window['index_y']]
+            df_window['distance-x'] = df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_y"]
+            df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
+            df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
+            
+            edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
+
+            edges_dataframe = edges_dataframe.append(pd.DataFrame({
+                'index_1': [edge[0] for edge in edges],
+                'index_2': [edge[1] for edge in edges],
+                'distance': [value[0] for value in df_window[["distance"]].values.tolist()],
+                MAGIK_DATASET_COLUMN_NAME: [setid for _ in range(len(edges))]
+            }), ignore_index=True)
+
+            edges_dataframe = edges_dataframe.drop_duplicates()
 
         edgefeatures = edges_dataframe[self.edge_features].to_numpy()
         sparseadjmtx = edges_dataframe[["index_1", "index_2"]].to_numpy().astype(int)
@@ -233,7 +260,7 @@ class LocalizationClassifier():
             (nfsolution, efsolution, global_property),
             (nodesets, edgesets, framesets)
         )
-    
+
     @property
     def train_full_graph_file_name(self):
         return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.tmp"
@@ -316,22 +343,20 @@ class LocalizationClassifier():
                     edge_labels = labels[1][edgeidxs]
                     glob_labels = labels[2][randset]
 
-                    frame_sets = sets[2][nodeidxs]
-
                     return (node_features, edge_features, edge_connections, weights), (
                         node_labels,
                         edge_labels,
                         glob_labels,
-                    ), (frame_sets)
+                    )
 
                 return inner
 
             def CustomGetSubGraph():
                 def inner(data):
-                    graph, labels, sets = data
+                    graph, labels = data
 
-                    min_num_nodes = 1000
-                    max_num_nodes = 1500
+                    min_num_nodes = 2500
+                    max_num_nodes = 3000
 
                     num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
 
@@ -356,40 +381,49 @@ class LocalizationClassifier():
 
                 return inner
 
-            """
             def CustomDatasetBalancing():
                 def inner(data):
                     graph, labels = data
 
-                    number_of_clusterized_nodes = np.sum(np.array((labels[0][:, 0] == 1)) * 1)
-                    number_of_non_clusterized_nodes = np.sum(np.array(labels[0][:, 0] == 0) * 1)
+                    boolean_array_if_node_is_clusterized = labels[0][:, 0] == 1
+                    boolean_array_if_node_is_not_clusterized = labels[0][:, 0] == 0
 
-                    if number_of_clusterized_nodes > number_of_non_clusterized_nodes:
-                        graph, labels = data
-                        nodeidxs = np.array(np.where(labels[0][:, 0] == 1)[0])
+                    number_of_clusterized_nodes = np.sum(np.array((boolean_array_if_node_is_clusterized)) * 1)
+                    number_of_non_clusterized_nodes = np.sum(np.array(boolean_array_if_node_is_not_clusterized) * 1)
 
-                        nodes_to_select = np.random.choice(nodeidxs, size=number_of_non_clusterized_nodes, replace=False)
-                        nodes_to_select = np.append(nodes_to_select, np.array(np.where(labels[0][:, 0] == 0)[0]))
-                        nodes_to_select = sorted(nodes_to_select)
+                    if number_of_clusterized_nodes != number_of_non_clusterized_nodes and number_of_non_clusterized_nodes != 0 and number_of_clusterized_nodes != 0:
+                        retry = True
 
-                        id_to_new_id = {}
+                        while retry:
 
-                        for index, value in enumerate(nodes_to_select):
-                            id_to_new_id[value] = index
+                            if number_of_clusterized_nodes > number_of_non_clusterized_nodes:
+                                nodeidxs = np.array(np.where(boolean_array_if_node_is_clusterized)[0])
+                                nodes_to_select = np.random.choice(nodeidxs, size=number_of_non_clusterized_nodes, replace=False)
+                                nodes_to_select = np.append(nodes_to_select, np.array(np.where(boolean_array_if_node_is_not_clusterized)[0]))
+                            else:
+                                nodeidxs = np.array(np.where(boolean_array_if_node_is_not_clusterized)[0])
+                                nodes_to_select = np.random.choice(nodeidxs, size=number_of_clusterized_nodes, replace=False)
+                                nodes_to_select = np.append(nodes_to_select, np.array(np.where(boolean_array_if_node_is_clusterized)[0]))
 
-                        edge_connects_removed_node = np.any( ~np.isin(graph[2], nodes_to_select), axis=-1)
+                            nodes_to_select = sorted(nodes_to_select)
 
-                        node_features = graph[0][nodes_to_select]
-                        edge_features = graph[1][~edge_connects_removed_node]
-                        edge_connections = np.vectorize(id_to_new_id.get)(graph[2][~edge_connects_removed_node])
-                        weights = graph[3][~edge_connects_removed_node]
+                            id_to_new_id = {}
 
-                        node_labels = labels[0][nodes_to_select]
-                        edge_labels = labels[1][~edge_connects_removed_node]
-                        global_labels = labels[2]
+                            for index, value in enumerate(nodes_to_select):
+                                id_to_new_id[value] = index
 
+                            edge_connects_removed_node = np.any( ~np.isin(graph[2], nodes_to_select), axis=-1)
 
-                        #print(np.array(node_features).shape, np.array(edge_features).shape, np.array(edge_connections).shape, np.array(weights).shape, np.array(node_labels).shape, np.array(edge_labels).shape, np.array(global_labels).shape)
+                            node_features = graph[0][nodes_to_select]
+                            edge_features = graph[1][~edge_connects_removed_node]
+                            edge_connections = np.vectorize(id_to_new_id.get)(graph[2][~edge_connects_removed_node])
+                            weights = graph[3][~edge_connects_removed_node]
+
+                            node_labels = labels[0][nodes_to_select]
+                            edge_labels = labels[1][~edge_connects_removed_node]
+                            global_labels = labels[2]
+
+                            retry = node_features.shape[0] == edge_features.shape[0]
 
                         return (node_features, edge_features, edge_connections, weights), (
                             node_labels,
@@ -400,7 +434,6 @@ class LocalizationClassifier():
                         return graph, labels
 
                 return inner
-            """
 
             def CustomAugmentCentroids(rotate, flip_x, flip_y):
                 def inner(data):
@@ -435,14 +468,14 @@ class LocalizationClassifier():
                     dt.Value(full_graph)
                     >> dt.Lambda(CustomGetSubSet)
                     >> dt.Lambda(CustomGetSubGraph)
-                    #>> dt.Lambda(CustomDatasetBalancing)
+                    >> dt.Lambda(CustomDatasetBalancing)
                     >> dt.Lambda(
                         CustomAugmentCentroids,
                         rotate=lambda: np.random.rand() * 2 * np.pi,
                         flip_x=lambda: np.random.randint(2),
                         flip_y=lambda: np.random.randint(2),
                     )
-                    >> dt.Lambda(NodeDropout, dropout_rate=0.00)
+                    #>> dt.Lambda(NodeDropout, dropout_rate=0.00)
                 )
 
             magik_variables = dt.DummyFeature(
@@ -455,7 +488,7 @@ class LocalizationClassifier():
                 "batch_function": lambda graph: graph[0],
                 "label_function": lambda graph: graph[1],
                 "min_data_size": 512,
-                "max_data_size": 513,
+                #"max_data_size": 513,
                 "batch_size": self.hyperparameters["batch_size"],
                 "use_multi_inputs": False,
                 **magik_variables.properties(),
@@ -463,6 +496,7 @@ class LocalizationClassifier():
 
             generator = ContinuousGraphGenerator(CustomGetFeature(train_full_graph, **magik_variables.properties()), **args)
 
+            """
             try:
                 with tf.device('/gpu:0'):
                     with generator:
@@ -471,6 +505,10 @@ class LocalizationClassifier():
                 with tf.device('/cpu:0'):
                     with generator:
                         self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
+            """
+
+            with generator:
+                self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
 
             del generator
 
@@ -533,11 +571,15 @@ class LocalizationClassifier():
         self.magik_architecture.save_weights(self.model_file_name)
 
     def load_threshold(self):
+        """
         try:
             with open(self.threshold_file_name, "r") as threshold_file:
                 self.threshold = float(threshold_file.read())
         except FileNotFoundError:
             return None
+        """
+
+        self.threshold = 0.5
 
         return self.threshold
 

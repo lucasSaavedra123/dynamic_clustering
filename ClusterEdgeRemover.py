@@ -17,6 +17,9 @@ from scipy.spatial import Delaunay
 from sklearn.cluster import DBSCAN
 from sklearn.metrics import silhouette_score
 import ghostml
+import networkx as nx
+
+from infomap import Infomap
 
 from CONSTANTS import *
 
@@ -27,7 +30,7 @@ class ClusterEdgeRemover():
         return {
             "learning_rate": 0.001,
             "partition_size": 10000,
-            "epochs": 1,
+            "epochs": 25,
             "batch_size": 1,
         }
 
@@ -75,7 +78,7 @@ class ClusterEdgeRemover():
 
         self.magik_architecture.summary()
 
-    def transform_smlm_dataset_to_magik_dataframe(self, smlm_dataframe, set_number=0):
+    def transform_smlm_dataset_to_magik_dataframe(self, smlm_dataframe, set_number=0, ignored_non_clustered_localizations=True):
         smlm_dataframe = smlm_dataframe.rename(columns={
             X_POSITION_COLUMN_NAME: MAGIK_X_POSITION_COLUMN_NAME,
             Y_POSITION_COLUMN_NAME: MAGIK_Y_POSITION_COLUMN_NAME,
@@ -85,10 +88,11 @@ class ClusterEdgeRemover():
 
         smlm_dataframe['original_index_for_recovery'] = smlm_dataframe.index
 
-        if 'clusterized_predicted' in smlm_dataframe.columns:
-            smlm_dataframe = smlm_dataframe[smlm_dataframe['clusterized_predicted'] == 1]
-        else:
-            smlm_dataframe = smlm_dataframe[smlm_dataframe['clusterized'] == 1]
+        if ignored_non_clustered_localizations:
+            if 'clusterized_predicted' in smlm_dataframe.columns:
+                smlm_dataframe = smlm_dataframe[smlm_dataframe['clusterized_predicted'] == 1]
+            else:
+                smlm_dataframe = smlm_dataframe[smlm_dataframe['clusterized'] == 1]
 
         smlm_dataframe = smlm_dataframe.drop([CLUSTERIZED_COLUMN_NAME, CLUSTERIZED_COLUMN_NAME+'_predicted', PARTICLE_ID_COLUMN_NAME, "Unnamed: 0"], axis=1, errors="ignore")
         smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] / np.array([self.width, self.height]))
@@ -96,6 +100,7 @@ class ClusterEdgeRemover():
         smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / smlm_dataframe[TIME_COLUMN_NAME].abs().max()
         smlm_dataframe[MAGIK_DATASET_COLUMN_NAME] = set_number
         smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(int)
+        smlm_dataframe[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
         return smlm_dataframe.reset_index(drop=True)
 
@@ -137,7 +142,7 @@ class ClusterEdgeRemover():
 
         return full_dataset.reset_index(drop=True)
 
-    def predict(self, magik_dataset, apply_threshold=True, detect_clusters=True, verbose=True):
+    def predict(self, magik_dataset, apply_threshold=True, detect_clusters=True, verbose=True, original_dataset_path=None):
         assert not(not apply_threshold and detect_clusters), 'Cluster Detection cannot be performed without threshold apply'
 
         magik_dataset = magik_dataset.copy()
@@ -184,9 +189,39 @@ class ClusterEdgeRemover():
 
         edges_to_remove = np.where(predictions == 0)[0]
         remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
+        remaining_edges_weights = np.delete(grapht[0][1], edges_to_remove, axis=0)
 
+        """
+        As the cluster detection is sensible to the edge pruning (if only one edge is misclassified as positive, two clusters are merged),
+        detected connected components should be segmented to avoid this problem. If two clusters are merged and the performance of the
+        edge classifier is too high, both clusters may be segmentated maximizing the modularity of graph partition. Hint: Levounian
+        """
         cluster_sets = []
 
+        G=nx.Graph()
+        G.add_edges_from(remaining_edges_keep)
+        #G.add_weighted_edges_from(np.hstack((remaining_edges_keep, remaining_edges_weights)))
+
+        #S = [G.subgraph(c).copy() for c in nx.connected_components(G)]
+
+        #for subset in S:
+        #    cluster_sets += nx.community.louvain_communities(subset)
+
+        cluster_sets = nx.community.louvain_communities(G)
+        #cluster_sets = nx.connected_components(G)
+
+        """
+        im = Infomap(two_level=True, silent=True, num_trials=20)
+        im.add_networkx_graph(G)
+        im.run()
+
+        modules = im.get_modules()
+        cluster_sets = [set() for _ in range(len(set(modules.values())))]
+        [cluster_sets[c - 1].add(n) for n, c in modules.items()]
+        """
+
+        """
+        cluster_sets = []
         for i in range(len(remaining_edges_keep)):
             cluster_assigned = False
             if len(cluster_sets) == 0:
@@ -201,6 +236,7 @@ class ClusterEdgeRemover():
 
                 if not cluster_assigned:
                     cluster_sets.append(set([remaining_edges_keep[i][0], remaining_edges_keep[i][1]]))
+        """
 
         magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
@@ -212,6 +248,14 @@ class ClusterEdgeRemover():
 
         if MAGIK_LABEL_COLUMN_NAME in magik_dataset.columns:
             magik_dataset[MAGIK_LABEL_COLUMN_NAME] = magik_dataset[MAGIK_LABEL_COLUMN_NAME].astype(int)
+
+        if original_dataset_path is not None:
+            original_dataset = self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(original_dataset_path), ignored_non_clustered_localizations=False)
+
+            for _, row in magik_dataset.iterrows():
+                original_dataset.loc[row["original_index_for_recovery"], MAGIK_LABEL_COLUMN_NAME_PREDICTED] = row[MAGIK_LABEL_COLUMN_NAME_PREDICTED]
+
+            magik_dataset = original_dataset
 
         return magik_dataset
 
@@ -360,14 +404,15 @@ class ClusterEdgeRemover():
             iterator = tqdm.tqdm(self.get_dataset_file_paths_from(path)) if verbose else self.get_dataset_file_paths_from(path)
 
             for csv_file_name in iterator:
-                if detect_clusters:
-                    predictions = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=True, verbose=False, detect_clusters=True)
-                    if save_predictions:
-                        predictions.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
-                else:
-                    result = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=apply_threshold, detect_clusters=False, verbose=False)
-                    true += result[0][:,0].tolist()
-                    pred += result[1][:,0].tolist()
+                if not self.get_dataset_from_path(csv_file_name).empty:
+                    if detect_clusters:
+                        predictions = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=True, verbose=False, detect_clusters=True, original_dataset_path=csv_file_name)
+                        if save_predictions:
+                            predictions.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
+                    else:
+                        result = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=apply_threshold, detect_clusters=False, verbose=False)
+                        true += result[0][:,0].tolist()
+                        pred += result[1][:,0].tolist()
 
             if save_result:
                 pd.DataFrame({
@@ -395,53 +440,29 @@ class ClusterEdgeRemover():
         if self.load_keras_model() is None:
 
             def CustomGetSubSet():
-                """
-                Returns a function that takes a graph and returns a
-                random subset of the graph.
-                """
-
                 def inner(data):
                     graph, labels, sets = data
 
-                    retry = True
+                    randset= np.random.randint(np.max(sets[0][:, 0]) + 1)
 
-                    while retry:
-                        randset = np.random.randint(np.max(np.array(sets[0])[:,0]) + 1)
+                    nodeidxs = np.where(sets[0][:, 0] == randset)[0]
+                    edgeidxs = np.where(sets[1][:, 0] == randset)[0]
 
-                        nodeidxs = np.where(sets[0][:, 0] == randset)[0]
-                        edgeidxs = np.where(sets[1][:, 0] == randset)[0]
+                    node_features = graph[0][nodeidxs]
+                    edge_features = graph[1][edgeidxs]
+                    edge_connections = graph[2][edgeidxs] - np.min(nodeidxs)
 
-                        min_node = np.min(nodeidxs)
+                    weights = graph[3][edgeidxs]
 
-                        node_features = graph[0][nodeidxs]
-                        edge_features = graph[1][edgeidxs]
-                        edge_connections = graph[2][edgeidxs] - min_node
-
-                        weights = graph[3][edgeidxs]
-
-                        node_labels = labels[0][nodeidxs]
-                        edge_labels = labels[1][edgeidxs]
-                        glob_labels = labels[2][randset]
-
-                        """
-                        node_sets = sets[0][nodeidxs]
-                        edge_sets = sets[1][edgeidxs]
-
-                        node_sets[:,0] = 0
-                        edge_sets[:,0] = 0
-                        """
-
-                        frame_sets = sets[2][nodeidxs]
-                        count = Counter(np.array(edge_labels)[:,0])
-                        retry = len(count) == 0 or count[0] == 0 or count[1] == 0
-
-                    #print("CustomGetSubSet", node_features.shape, edge_features.shape, edge_connections.shape, node_labels.shape, edge_labels.shape, glob_labels.shape)
+                    node_labels = labels[0][nodeidxs]
+                    edge_labels = labels[1][edgeidxs]
+                    glob_labels = labels[2][randset]
 
                     return (node_features, edge_features, edge_connections, weights), (
                         node_labels,
                         edge_labels,
                         glob_labels,
-                    )#, (frame_sets) #, (node_sets, edge_sets, frame_sets)
+                    )
 
                 return inner
 
@@ -452,29 +473,20 @@ class ClusterEdgeRemover():
                     min_num_nodes = 2500
                     max_num_nodes = 3000
 
-                    retry = True
+                    num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
 
-                    while retry:
+                    node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
 
-                        num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
+                    edge_connects_removed_node = np.any((graph[2] < node_start) | (graph[2] >= node_start + num_nodes),axis=-1)
 
-                        node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
+                    node_features = graph[0][node_start : node_start + num_nodes]
+                    edge_features = graph[1][~edge_connects_removed_node]
+                    edge_connections = graph[2][~edge_connects_removed_node] - node_start
+                    weights = graph[3][~edge_connects_removed_node]
 
-                        edge_connects_removed_node = np.any((graph[2] < node_start) | (graph[2] >= node_start + num_nodes),axis=-1)
-
-                        node_features = graph[0][node_start : node_start + num_nodes]
-                        edge_features = graph[1][~edge_connects_removed_node]
-                        edge_connections = graph[2][~edge_connects_removed_node] - node_start
-                        weights = graph[3][~edge_connects_removed_node]
-
-                        node_labels = labels[0][node_start : node_start + num_nodes]
-                        edge_labels = labels[1][~edge_connects_removed_node]
-                        global_labels = labels[2]
-
-                        count = Counter(np.array(edge_labels)[:,0])
-                        retry = len(np.array(edge_labels)) == 0 or count[0] == 0 or count[1] == 0
-
-                    #print("CustomGetSubGraph", node_features.shape, edge_features.shape, edge_connections.shape, node_labels.shape, edge_labels.shape, global_labels.shape)
+                    node_labels = labels[0][node_start : node_start + num_nodes]
+                    edge_labels = labels[1][~edge_connects_removed_node]
+                    global_labels = labels[2]
 
                     return (node_features, edge_features, edge_connections, weights), (
                         node_labels,
@@ -488,42 +500,53 @@ class ClusterEdgeRemover():
                 def inner(data):
                     graph, labels = data
 
-                    number_of_same_cluster_edges = np.sum(np.array((labels[1][:, 0] == 1)) * 1)
-                    number_of_non_same_cluster_edges = np.sum(np.array(labels[1][:, 0] == 0) * 1)
+                    boolean_array_if_node_is_same_cluster = labels[1][:, 0] == 1
+                    boolean_array_if_node_is_not_same_cluster = labels[1][:, 0] == 0
 
-                    if number_of_same_cluster_edges > number_of_non_same_cluster_edges:
-                        edgeidxs = np.array(np.where(labels[1][:, 0] == 1)[0])
+                    number_of_same_cluster_edges = np.sum(np.array((boolean_array_if_node_is_same_cluster)) * 1)
+                    number_of_non_same_cluster_edges = np.sum(np.array(boolean_array_if_node_is_not_same_cluster) * 1)
 
-                        number_of_edges_to_select = number_of_non_same_cluster_edges
+                    if number_of_same_cluster_edges != number_of_non_same_cluster_edges and number_of_same_cluster_edges != 0 and number_of_non_same_cluster_edges != 0:
+                        retry = True
 
-                        edges_to_select = np.random.choice(edgeidxs, size=number_of_edges_to_select, replace=False)
-                        edges_to_select = np.append(edges_to_select, np.array(np.where(labels[1][:, 0] == 0)[0]))
-                        nodes_to_select = np.unique(np.array(graph[2][edges_to_select]))
+                        while retry:
 
-                        id_to_new_id = {}
+                            if number_of_same_cluster_edges > number_of_non_same_cluster_edges:
+                                edgeidxs = np.array(np.where(boolean_array_if_node_is_same_cluster)[0])
+                                edges_to_select = np.random.choice(edgeidxs, size=number_of_non_same_cluster_edges, replace=False)
+                                edges_to_select = np.append(edges_to_select, np.array(np.where(boolean_array_if_node_is_not_same_cluster)[0]))
+                            else:
+                                edgeidxs = np.array(np.where(boolean_array_if_node_is_not_same_cluster)[0])
+                                edges_to_select = np.random.choice(edgeidxs, size=number_of_same_cluster_edges, replace=False)
+                                edges_to_select = np.append(edges_to_select, np.array(np.where(boolean_array_if_node_is_same_cluster)[0]))                                
 
-                        for index, value in enumerate(nodes_to_select):
-                            id_to_new_id[value] = index
+                            nodes_to_select = sorted(np.unique(np.array(graph[2][edges_to_select])))
 
-                        node_features = graph[0][nodes_to_select]
-                        edge_features = graph[1][edges_to_select]
-                        edge_connections = graph[2][edges_to_select]
+                            id_to_new_id = {}
 
-                        edge_connections = np.vectorize(id_to_new_id.get)(edge_connections)
+                            for index, value in enumerate(nodes_to_select):
+                                id_to_new_id[value] = index
 
-                        weights = graph[3][edges_to_select]
+                            node_features = graph[0][nodes_to_select]
+                            edge_features = graph[1][edges_to_select]
+                            edge_connections = graph[2][edges_to_select]
 
-                        node_labels = labels[0][nodes_to_select]
-                        edge_labels = labels[1][edges_to_select]
-                        global_labels = labels[2]
+                            edge_connections = np.vectorize(id_to_new_id.get)(edge_connections)
 
-                        #print("CustomDatasetBalancing", node_features.shape, edge_features.shape, edge_connections.shape, node_labels.shape, edge_labels.shape, global_labels.shape)
+                            weights = graph[3][edges_to_select]
+
+                            node_labels = labels[0][nodes_to_select]
+                            edge_labels = labels[1][edges_to_select]
+                            global_labels = labels[2]
+
+                            retry = node_features.shape[0] == edge_features.shape[0]
 
                         return (node_features, edge_features, edge_connections, weights), (
                             node_labels,
                             edge_labels,
                             global_labels,
                         )
+                    
                     else:
                         return graph, labels
 
@@ -570,7 +593,7 @@ class ClusterEdgeRemover():
                         flip_x=lambda: np.random.randint(2),
                         flip_y=lambda: np.random.randint(2)
                     )
-                    >> dt.Lambda(NodeDropout, dropout_rate=0.00)
+                    #>> dt.Lambda(NodeDropout, dropout_rate=0.00)
                 )
 
             magik_variables = dt.DummyFeature(
@@ -582,7 +605,7 @@ class ClusterEdgeRemover():
             args = {
                 "batch_function": lambda graph: graph[0],
                 "label_function": lambda graph: graph[1],
-                "min_data_size": 126,
+                "min_data_size": 512,
                 #"max_data_size": 513,
                 "batch_size": self.hyperparameters["batch_size"],
                 "use_multi_inputs": False,
@@ -657,11 +680,15 @@ class ClusterEdgeRemover():
         self.magik_architecture.save_weights(self.model_file_name)
 
     def load_threshold(self):
+        """
         try:
             with open(self.threshold_file_name, "r") as threshold_file:
                 self.threshold = float(threshold_file.read())
         except FileNotFoundError:
             return None
+        """
+
+        self.threshold = 0.5
 
         return self.threshold
 

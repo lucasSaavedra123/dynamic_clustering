@@ -1,21 +1,7 @@
-import os
-
-import pandas as pd
 from keras import backend as K
-
 from ClusterEdgeRemover import ClusterEdgeRemover
-from sklearn.metrics import confusion_matrix, f1_score
 
 print("Number of Hyperparameter Combinations:", len(ClusterEdgeRemover.analysis_hyperparameters()['batch_size']))
-
-"""
-results = pd.DataFrame({
-    'pos_accuracy': [],
-    'neg_accuracy': [],
-    'f1-score': [],
-    'batch_size': [],
-})
-"""
 
 DATASET_PATH = 'datasets_shuffled'
 
@@ -30,6 +16,6 @@ for batch_size in ClusterEdgeRemover.analysis_hyperparameters()['batch_size']:
 
     classifier.fit_with_datasets_from_path(f'./{DATASET_PATH}/train')
     classifier.save_model()
-    classifier.test_with_datasets_from_path(f'./{DATASET_PATH}/test', save_result=True, save_predictions=True, apply_threshold=True, check_if_predictions_file_name_exists=True)
-
-#results.to_csv('results.csv')
+    classifier.test_with_datasets_from_path(f'./{DATASET_PATH}/test', save_result=False, detect_clusters=True, save_predictions=True, apply_threshold=True, check_if_predictions_file_name_exists=False)
+    classifier.test_with_datasets_from_path(f'./{DATASET_PATH}/test', save_result=True, detect_clusters=False, save_predictions=False, apply_threshold=True, check_if_predictions_file_name_exists=True)
+    #results.to_csv('results.csv')
