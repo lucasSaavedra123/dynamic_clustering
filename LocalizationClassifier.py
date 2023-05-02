@@ -1,13 +1,8 @@
-from collections import Counter
 import os
-import more_itertools as mit
 import tqdm
-from operator import is_not
-from functools import partial
 import pickle
-from scipy.spatial import Delaunay
+import json
 
-from deeptrack.models.gnns.augmentations import NodeDropout
 from deeptrack.models.gnns.generators import ContinuousGraphGenerator
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
@@ -16,10 +11,11 @@ import deeptrack as dt
 import tensorflow as tf
 import numpy as np
 import pandas as pd
-import ghostml
-import json
+from scipy.spatial import Delaunay
+import tqdm
 
 from CONSTANTS import *
+from training_utils import *
 
 
 class LocalizationClassifier():
@@ -31,7 +27,7 @@ class LocalizationClassifier():
             "nofframes": 11,
             "partition_size": 100,
             "epochs": 100,
-            "batch_size": 4,
+            "batch_size": 1,
         }
 
     @classmethod
@@ -263,23 +259,23 @@ class LocalizationClassifier():
 
     @property
     def train_full_graph_file_name(self):
-        return f"node_classifier_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.tmp"
+        return f"node_classifier.tmp"
 
     @property
     def model_file_name(self):
-        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.h5"
+        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}.h5"
 
     @property
     def threshold_file_name(self):
-        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.bin"
+        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}.bin"
+
+    @property
+    def history_training_info_file_name(self):
+        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}.json"
 
     @property
     def predictions_file_name(self):
-        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv"
-    
-    @property
-    def history_training_info_file_name(self):
-        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}_radius_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}.json"
+        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.csv"
 
     def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True, check_if_predictions_file_name_exists=False):
         if check_if_predictions_file_name_exists and os.path.exists(self.predictions_file_name):
@@ -323,172 +319,31 @@ class LocalizationClassifier():
             fileObj.close()
 
         if self.load_keras_model() is None:
-
-            def CustomGetSubSet():
-                def inner(data):
-                    graph, labels, sets = data
-
-                    randset= np.random.randint(np.max(sets[0][:, 0]) + 1)
-
-                    nodeidxs = np.where(sets[0][:, 0] == randset)[0]
-                    edgeidxs = np.where(sets[1][:, 0] == randset)[0]
-
-                    node_features = graph[0][nodeidxs]
-                    edge_features = graph[1][edgeidxs]
-                    edge_connections = graph[2][edgeidxs] - np.min(nodeidxs)
-
-                    weights = graph[3][edgeidxs]
-
-                    node_labels = labels[0][nodeidxs]
-                    edge_labels = labels[1][edgeidxs]
-                    glob_labels = labels[2][randset]
-
-                    return (node_features, edge_features, edge_connections, weights), (
-                        node_labels,
-                        edge_labels,
-                        glob_labels,
-                    )
-
-                return inner
-
-            def CustomGetSubGraph():
-                def inner(data):
-                    graph, labels = data
-
-                    min_num_nodes = 2500
-                    max_num_nodes = 3000
-
-                    num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
-
-                    node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
-
-                    edge_connects_removed_node = np.any((graph[2] < node_start) | (graph[2] >= node_start + num_nodes),axis=-1)
-
-                    node_features = graph[0][node_start : node_start + num_nodes]
-                    edge_features = graph[1][~edge_connects_removed_node]
-                    edge_connections = graph[2][~edge_connects_removed_node] - node_start
-                    weights = graph[3][~edge_connects_removed_node]
-
-                    node_labels = labels[0][node_start : node_start + num_nodes]
-                    edge_labels = labels[1][~edge_connects_removed_node]
-                    global_labels = labels[2]
-
-                    return (node_features, edge_features, edge_connections, weights), (
-                        node_labels,
-                        edge_labels,
-                        global_labels,
-                    )
-
-                return inner
-
-            def CustomDatasetBalancing():
-                def inner(data):
-                    graph, labels = data
-
-                    boolean_array_if_node_is_clusterized = labels[0][:, 0] == 1
-                    boolean_array_if_node_is_not_clusterized = labels[0][:, 0] == 0
-
-                    number_of_clusterized_nodes = np.sum(np.array((boolean_array_if_node_is_clusterized)) * 1)
-                    number_of_non_clusterized_nodes = np.sum(np.array(boolean_array_if_node_is_not_clusterized) * 1)
-
-                    if number_of_clusterized_nodes != number_of_non_clusterized_nodes and number_of_non_clusterized_nodes != 0 and number_of_clusterized_nodes != 0:
-                        retry = True
-
-                        while retry:
-
-                            if number_of_clusterized_nodes > number_of_non_clusterized_nodes:
-                                nodeidxs = np.array(np.where(boolean_array_if_node_is_clusterized)[0])
-                                nodes_to_select = np.random.choice(nodeidxs, size=number_of_non_clusterized_nodes, replace=False)
-                                nodes_to_select = np.append(nodes_to_select, np.array(np.where(boolean_array_if_node_is_not_clusterized)[0]))
-                            else:
-                                nodeidxs = np.array(np.where(boolean_array_if_node_is_not_clusterized)[0])
-                                nodes_to_select = np.random.choice(nodeidxs, size=number_of_clusterized_nodes, replace=False)
-                                nodes_to_select = np.append(nodes_to_select, np.array(np.where(boolean_array_if_node_is_clusterized)[0]))
-
-                            nodes_to_select = sorted(nodes_to_select)
-
-                            id_to_new_id = {}
-
-                            for index, value in enumerate(nodes_to_select):
-                                id_to_new_id[value] = index
-
-                            edge_connects_removed_node = np.any( ~np.isin(graph[2], nodes_to_select), axis=-1)
-
-                            node_features = graph[0][nodes_to_select]
-                            edge_features = graph[1][~edge_connects_removed_node]
-                            edge_connections = np.vectorize(id_to_new_id.get)(graph[2][~edge_connects_removed_node])
-                            weights = graph[3][~edge_connects_removed_node]
-
-                            node_labels = labels[0][nodes_to_select]
-                            edge_labels = labels[1][~edge_connects_removed_node]
-                            global_labels = labels[2]
-
-                            retry = node_features.shape[0] == edge_features.shape[0]
-
-                        return (node_features, edge_features, edge_connections, weights), (
-                            node_labels,
-                            edge_labels,
-                            global_labels,
-                        )
-                    else:
-                        return graph, labels
-
-                return inner
-
-            def CustomAugmentCentroids(rotate, flip_x, flip_y):
-                def inner(data):
-                    graph, labels = data
-
-                    centroids = graph[0][:, :2]
-
-                    centroids = centroids - 0.5
-                    centroids_x = (
-                        centroids[:, 0] * np.cos(rotate)
-                        + centroids[:, 1] * np.sin(rotate)
-                    )
-                    centroids_y = (
-                        centroids[:, 1] * np.cos(rotate)
-                        - centroids[:, 0] * np.sin(rotate)
-                    )
-                    if flip_x:
-                        centroids_x *= -1
-                    if flip_y:
-                        centroids_y *= -1
-
-                    node_features = np.array(graph[0])
-                    node_features[:, 0] = centroids_x + 0.5
-                    node_features[:, 1] = centroids_y + 0.5
-
-                    return (node_features, *graph[1:]), labels
-
-                return inner
-
             def CustomGetFeature(full_graph, **kwargs):
                 return (
                     dt.Value(full_graph)
                     >> dt.Lambda(CustomGetSubSet)
                     >> dt.Lambda(CustomGetSubGraph)
-                    >> dt.Lambda(CustomDatasetBalancing)
+                    >> dt.Lambda(CustomEdgeBalancing)
                     >> dt.Lambda(
                         CustomAugmentCentroids,
                         rotate=lambda: np.random.rand() * 2 * np.pi,
+                        translate=lambda: np.random.randn(2) * 0,
                         flip_x=lambda: np.random.randint(2),
-                        flip_y=lambda: np.random.randint(2),
+                        flip_y=lambda: np.random.randint(2)
                     )
-                    #>> dt.Lambda(NodeDropout, dropout_rate=0.00)
                 )
 
             magik_variables = dt.DummyFeature(
-                radius=self.hyperparameters["radius"],
+                radius=None,
                 output_type=self._output_type,
-                nofframes=self.hyperparameters["nofframes"],  # time window to associate nodes (in frames)
+                nofframes=None
             )
 
             args = {
                 "batch_function": lambda graph: graph[0],
                 "label_function": lambda graph: graph[1],
-                "min_data_size": 512,
-                #"max_data_size": 513,
+                "min_data_size": 10,
                 "batch_size": self.hyperparameters["batch_size"],
                 "use_multi_inputs": False,
                 **magik_variables.properties(),
@@ -496,44 +351,15 @@ class LocalizationClassifier():
 
             generator = ContinuousGraphGenerator(CustomGetFeature(train_full_graph, **magik_variables.properties()), **args)
 
-            """
-            try:
-                with tf.device('/gpu:0'):
-                    with generator:
-                        self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
-            except:
-                with tf.device('/cpu:0'):
-                    with generator:
-                        self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
-            """
+            device_name = '/gpu:0' if len(tf.config.list_physical_devices('GPU')) == 1 else '/cpu:0'
 
-            with generator:
-                self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
+            with tf.device(device_name):
+                with generator:
+                    self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
 
             del generator
 
         del train_full_graph
-
-        if self.load_threshold() is None:
-            print("Running Ghost...")
-            true = []
-            pred = []
-
-            true, pred = self.test_with_datasets_from_path(path, apply_threshold=False, save_result=False, verbose=True)
-
-            count = Counter(true)
-            positive_is_majority = count[1] > count[0]
-
-            if positive_is_majority:
-                true = 1 - np.array(true)
-                pred = 1 - np.array(pred)
-
-            thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
-
-            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC')
-
-            if positive_is_majority:
-                self.threshold = 1 - self.threshold
 
     def plot_confusion_matrix(self, ground_truth, Y_predicted, normalized=True):
         confusion_mat = confusion_matrix(y_true=ground_truth, y_pred=Y_predicted)
@@ -570,19 +396,6 @@ class LocalizationClassifier():
     def save_keras_model(self):
         self.magik_architecture.save_weights(self.model_file_name)
 
-    def load_threshold(self):
-        """
-        try:
-            with open(self.threshold_file_name, "r") as threshold_file:
-                self.threshold = float(threshold_file.read())
-        except FileNotFoundError:
-            return None
-        """
-
-        self.threshold = 0.5
-
-        return self.threshold
-
     def load_history_training_info(self):
         try:
             with open(self.history_training_info_file_name, "r") as json_file:
@@ -603,5 +416,4 @@ class LocalizationClassifier():
 
     def load_model(self):
         self.load_keras_model()
-        self.load_threshold()
         self.load_history_training_info()

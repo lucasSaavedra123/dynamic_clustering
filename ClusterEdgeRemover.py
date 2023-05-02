@@ -1,10 +1,8 @@
-from collections import Counter
 import os
 import tqdm
 import pickle
 import json
 
-from deeptrack.models.gnns.augmentations import NodeDropout
 from deeptrack.models.gnns.generators import ContinuousGraphGenerator
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
@@ -14,13 +12,9 @@ import tensorflow as tf
 import numpy as np
 import pandas as pd
 from scipy.spatial import Delaunay
-from sklearn.cluster import DBSCAN
-from sklearn.metrics import silhouette_score
-import ghostml
 import networkx as nx
 
-from infomap import Infomap
-
+from training_utils import *
 from CONSTANTS import *
 
 
@@ -379,10 +373,6 @@ class ClusterEdgeRemover():
         return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}.h5"
 
     @property
-    def threshold_file_name(self):
-        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}.bin"
-
-    @property
     def predictions_file_name(self):
         return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}.csv"
     
@@ -438,154 +428,12 @@ class ClusterEdgeRemover():
             fileObj.close()
 
         if self.load_keras_model() is None:
-
-            def CustomGetSubSet():
-                def inner(data):
-                    graph, labels, sets = data
-
-                    randset= np.random.randint(np.max(sets[0][:, 0]) + 1)
-
-                    nodeidxs = np.where(sets[0][:, 0] == randset)[0]
-                    edgeidxs = np.where(sets[1][:, 0] == randset)[0]
-
-                    node_features = graph[0][nodeidxs]
-                    edge_features = graph[1][edgeidxs]
-                    edge_connections = graph[2][edgeidxs] - np.min(nodeidxs)
-
-                    weights = graph[3][edgeidxs]
-
-                    node_labels = labels[0][nodeidxs]
-                    edge_labels = labels[1][edgeidxs]
-                    glob_labels = labels[2][randset]
-
-                    return (node_features, edge_features, edge_connections, weights), (
-                        node_labels,
-                        edge_labels,
-                        glob_labels,
-                    )
-
-                return inner
-
-            def CustomGetSubGraph():
-                def inner(data):
-                    graph, labels = data
-
-                    min_num_nodes = 2500
-                    max_num_nodes = 3000
-
-                    num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
-
-                    node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
-
-                    edge_connects_removed_node = np.any((graph[2] < node_start) | (graph[2] >= node_start + num_nodes),axis=-1)
-
-                    node_features = graph[0][node_start : node_start + num_nodes]
-                    edge_features = graph[1][~edge_connects_removed_node]
-                    edge_connections = graph[2][~edge_connects_removed_node] - node_start
-                    weights = graph[3][~edge_connects_removed_node]
-
-                    node_labels = labels[0][node_start : node_start + num_nodes]
-                    edge_labels = labels[1][~edge_connects_removed_node]
-                    global_labels = labels[2]
-
-                    return (node_features, edge_features, edge_connections, weights), (
-                        node_labels,
-                        edge_labels,
-                        global_labels,
-                    )
-
-                return inner
-
-            def CustomDatasetBalancing():
-                def inner(data):
-                    graph, labels = data
-
-                    boolean_array_if_node_is_same_cluster = labels[1][:, 0] == 1
-                    boolean_array_if_node_is_not_same_cluster = labels[1][:, 0] == 0
-
-                    number_of_same_cluster_edges = np.sum(np.array((boolean_array_if_node_is_same_cluster)) * 1)
-                    number_of_non_same_cluster_edges = np.sum(np.array(boolean_array_if_node_is_not_same_cluster) * 1)
-
-                    if number_of_same_cluster_edges != number_of_non_same_cluster_edges and number_of_same_cluster_edges != 0 and number_of_non_same_cluster_edges != 0:
-                        retry = True
-
-                        while retry:
-
-                            if number_of_same_cluster_edges > number_of_non_same_cluster_edges:
-                                edgeidxs = np.array(np.where(boolean_array_if_node_is_same_cluster)[0])
-                                edges_to_select = np.random.choice(edgeidxs, size=number_of_non_same_cluster_edges, replace=False)
-                                edges_to_select = np.append(edges_to_select, np.array(np.where(boolean_array_if_node_is_not_same_cluster)[0]))
-                            else:
-                                edgeidxs = np.array(np.where(boolean_array_if_node_is_not_same_cluster)[0])
-                                edges_to_select = np.random.choice(edgeidxs, size=number_of_same_cluster_edges, replace=False)
-                                edges_to_select = np.append(edges_to_select, np.array(np.where(boolean_array_if_node_is_same_cluster)[0]))                                
-
-                            nodes_to_select = sorted(np.unique(np.array(graph[2][edges_to_select])))
-
-                            id_to_new_id = {}
-
-                            for index, value in enumerate(nodes_to_select):
-                                id_to_new_id[value] = index
-
-                            node_features = graph[0][nodes_to_select]
-                            edge_features = graph[1][edges_to_select]
-                            edge_connections = graph[2][edges_to_select]
-
-                            edge_connections = np.vectorize(id_to_new_id.get)(edge_connections)
-
-                            weights = graph[3][edges_to_select]
-
-                            node_labels = labels[0][nodes_to_select]
-                            edge_labels = labels[1][edges_to_select]
-                            global_labels = labels[2]
-
-                            retry = node_features.shape[0] == edge_features.shape[0]
-
-                        return (node_features, edge_features, edge_connections, weights), (
-                            node_labels,
-                            edge_labels,
-                            global_labels,
-                        )
-                    
-                    else:
-                        return graph, labels
-
-                return inner
-
-            def CustomAugmentCentroids(rotate, flip_x, flip_y):
-                def inner(data):
-                    graph, labels = data
-
-                    centroids = graph[0][:, :2]
-
-                    centroids = centroids - 0.5
-                    centroids_x = (
-                        centroids[:, 0] * np.cos(rotate)
-                        + centroids[:, 1] * np.sin(rotate)
-                    )
-                    centroids_y = (
-                        centroids[:, 1] * np.cos(rotate)
-                        - centroids[:, 0] * np.sin(rotate)
-                    )
-                    if flip_x:
-                        centroids_x *= -1
-                    if flip_y:
-                        centroids_y *= -1
-
-                    node_features = np.array(graph[0])
-                    node_features[:, 0] = centroids_x + 0.5
-                    node_features[:, 1] = centroids_y + 0.5
-
-                    return (node_features, *graph[1:]), labels
-
-                return inner
-
             def CustomGetFeature(full_graph, **kwargs):
                 return (
                     dt.Value(full_graph)
                     >> dt.Lambda(CustomGetSubSet)
                     >> dt.Lambda(CustomGetSubGraph)
-                    >> dt.Lambda(CustomDatasetBalancing)
+                    >> dt.Lambda(CustomEdgeBalancing)
                     >> dt.Lambda(
                         CustomAugmentCentroids,
                         rotate=lambda: np.random.rand() * 2 * np.pi,
@@ -593,7 +441,6 @@ class ClusterEdgeRemover():
                         flip_x=lambda: np.random.randint(2),
                         flip_y=lambda: np.random.randint(2)
                     )
-                    #>> dt.Lambda(NodeDropout, dropout_rate=0.00)
                 )
 
             magik_variables = dt.DummyFeature(
@@ -606,7 +453,6 @@ class ClusterEdgeRemover():
                 "batch_function": lambda graph: graph[0],
                 "label_function": lambda graph: graph[1],
                 "min_data_size": 512,
-                #"max_data_size": 513,
                 "batch_size": self.hyperparameters["batch_size"],
                 "use_multi_inputs": False,
                 **magik_variables.properties(),
@@ -620,27 +466,6 @@ class ClusterEdgeRemover():
             del generator
         
         del train_full_graph
-
-        if self.load_threshold() is None:
-            print("Running Ghost...")
-            true = []
-            pred = []
-
-            true, pred = self.test_with_datasets_from_path(path, apply_threshold=False, detect_clusters=False, save_result=False, verbose=True)
-
-            count = Counter(true)
-            positive_is_majority = count[1] > count[0]
-
-            if positive_is_majority:
-                true = 1 - np.array(true)
-                pred = 1 - np.array(pred)
-
-            thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
-
-            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC')
-
-            if positive_is_majority:
-                self.threshold = 1 - self.threshold
 
     def plot_confusion_matrix(self, ground_truth, Y_predicted, normalized=True):
         confusion_mat = confusion_matrix(y_true=ground_truth, y_pred=Y_predicted)
@@ -661,47 +486,16 @@ class ClusterEdgeRemover():
         plt.xlabel("Predicted label", fontsize=15)
         plt.show()
 
-    def save_threshold(self):
-        with open(self.threshold_file_name, "w") as threshold_file:
-            threshold_file.write(str(self.threshold))
-
-    """
     def save_history_training_info(self):
         with open(self.history_training_info_file_name, "w") as json_file:
             json.dump(self.history_training_info, json_file)
-    """
 
     def save_model(self):
         self.save_keras_model()
-        self.save_threshold()
-        #self.save_history_training_info()
+        self.save_history_training_info()
 
     def save_keras_model(self):
         self.magik_architecture.save_weights(self.model_file_name)
-
-    def load_threshold(self):
-        """
-        try:
-            with open(self.threshold_file_name, "r") as threshold_file:
-                self.threshold = float(threshold_file.read())
-        except FileNotFoundError:
-            return None
-        """
-
-        self.threshold = 0.5
-
-        return self.threshold
-
-    """
-    def load_history_training_info(self):
-        try:
-            with open(self.history_training_info_file_name, "r") as json_file:
-                self.history_training_info = json.load(json_file)
-        except FileNotFoundError:
-            return None
-
-        return self.history_training_info
-    """
         
     def load_keras_model(self):
         try:
@@ -714,5 +508,3 @@ class ClusterEdgeRemover():
 
     def load_model(self):
         self.load_keras_model()
-        self.load_threshold()
-        #self.load_history_training_info()
