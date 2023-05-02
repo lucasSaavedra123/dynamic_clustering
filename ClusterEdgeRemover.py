@@ -288,26 +288,10 @@ class ClusterEdgeRemover():
             new_index_to_old_index = {new_index:df_window.loc[new_index, 'index'] for new_index in df_window.index.values}
             list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
             list_of_edges = np.unique(list_of_edges, axis=0).tolist() # remove duplicates
-            list_of_dataframes = []
+            list_of_edges_as_dataframe = pd.DataFrame({'index_x': [edge[0] for edge in list_of_edges], 'index_y': [edge[1] for edge in list_of_edges]})
 
-            for edge in list_of_edges:
-                x_index = df_window["index"] == edge[0]
-                y_index = df_window["index"] == edge[1]
-
-                list_of_dataframes.append(pd.DataFrame({
-                    f"{MAGIK_X_POSITION_COLUMN_NAME}_x": [df_window[x_index][f"{MAGIK_X_POSITION_COLUMN_NAME}"].values[0]],
-                    f"{MAGIK_X_POSITION_COLUMN_NAME}_y": [df_window[y_index][f"{MAGIK_X_POSITION_COLUMN_NAME}"].values[0]],
-                    f"{MAGIK_Y_POSITION_COLUMN_NAME}_x": [df_window[x_index][f"{MAGIK_Y_POSITION_COLUMN_NAME}"].values[0]],
-                    f"{MAGIK_Y_POSITION_COLUMN_NAME}_y": [df_window[y_index][f"{MAGIK_Y_POSITION_COLUMN_NAME}"].values[0]],
-                    'index_x': [edge[0]],
-                    'index_y': [edge[1]],
-                    MAGIK_LABEL_COLUMN_NAME+"_x": [df_window[x_index][f"{MAGIK_LABEL_COLUMN_NAME}"].values[0]],
-                    MAGIK_LABEL_COLUMN_NAME+"_y": [df_window[y_index][f"{MAGIK_LABEL_COLUMN_NAME}"].values[0]],
-                    TIME_COLUMN_NAME+"_x": [df_window[x_index][f"{TIME_COLUMN_NAME}"].values[0]],
-                    TIME_COLUMN_NAME+"_y": [df_window[y_index][f"{TIME_COLUMN_NAME}"].values[0]],
-                }))
-
-            simplified_cross = pd.concat(list_of_dataframes, ignore_index=True)
+            simplified_cross = list_of_edges_as_dataframe.merge(df_window.rename(columns={old_column_name: old_column_name+'_x' for old_column_name in df_window.columns}), on='index_x')
+            simplified_cross = simplified_cross.merge(df_window.rename(columns={old_column_name: old_column_name+'_y' for old_column_name in df_window.columns}), on='index_y')
 
             df_window = simplified_cross.copy()
             df_window = df_window[df_window['index_x'] != df_window['index_y']]
