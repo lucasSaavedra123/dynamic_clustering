@@ -3,7 +3,6 @@ import tqdm
 import pickle
 import json
 
-from deeptrack.models.gnns.generators import ContinuousGraphGenerator
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -13,6 +12,7 @@ import pandas as pd
 from scipy.spatial import Delaunay
 import tqdm
 
+from deeptrack.models.gnns.generators import ContinuousGraphGenerator
 from CONSTANTS import *
 from training_utils import *
 
@@ -24,10 +24,10 @@ class LocalizationClassifier():
             "learning_rate": 0.001,
             "radius": 0.05,
             "nofframes": 11,
-            "partition_size": 25000,
-            "epochs": 3,
+            "partition_size": 5000,
+            "epochs": 50,
             "batch_size": 1,
-            "training_set_in_epoch_size": 25
+            "training_set_in_epoch_size": 512
         }
 
     @classmethod
@@ -117,7 +117,7 @@ class LocalizationClassifier():
         full_dataset = pd.DataFrame({})
 
         for csv_file_index, csv_file_path in enumerate(self.get_dataset_file_paths_from(path)):
-            full_dataset = full_dataset.append(self.get_dataset_from_path(csv_file_path, set_number=csv_file_index), ignore_index=True)
+            full_dataset = pd.concat([full_dataset, self.get_dataset_from_path(csv_file_path, set_number=csv_file_index)], ignore_index=True)
 
         return full_dataset.reset_index(drop=True)
 
@@ -140,7 +140,7 @@ class LocalizationClassifier():
             considered_nodes = list(range(initial_index, final_index))
             considered_nodes_features = grapht[0][0][considered_nodes]
 
-            considered_edges_positions = np.any( np.isin(grapht[0][2], considered_nodes), axis=-1)
+            considered_edges_positions = np.all( np.isin(grapht[0][2], considered_nodes), axis=-1)
             considered_edges_features = grapht[0][1][considered_edges_positions]
             considered_edges = grapht[0][2][considered_edges_positions]
             considered_edges_weights = grapht[0][3][considered_edges_positions]
@@ -198,29 +198,13 @@ class LocalizationClassifier():
             new_index_to_old_index = {new_index:df_window.loc[new_index, 'index'] for new_index in df_window.index.values}
             list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
             list_of_edges = np.unique(list_of_edges, axis=0).tolist() # remove duplicates
-
-            simplified_cross = pd.DataFrame({
-                f"{MAGIK_X_POSITION_COLUMN_NAME}_x": [],
-                f"{MAGIK_X_POSITION_COLUMN_NAME}_y": [],
-                f"{MAGIK_Y_POSITION_COLUMN_NAME}_x": [],
-                f"{MAGIK_Y_POSITION_COLUMN_NAME}_y": [],
-                'index_x': [],
-                'index_y': [],
-                MAGIK_LABEL_COLUMN_NAME+"_x": [],
-                MAGIK_LABEL_COLUMN_NAME+"_y": [],
-                TIME_COLUMN_NAME+"_x": [],
-                TIME_COLUMN_NAME+"_y": []
-            })
-
-            """
-            PUEDE SER QUE EL LIMITE DE MEMORIA QUE TENEMOS AHORA SE PUEDA SOLUCIONAR CON DASK. LEER!!!
-            """
+            list_of_dataframes = []
 
             for edge in list_of_edges:
                 x_index = df_window["index"] == edge[0]
                 y_index = df_window["index"] == edge[1]
 
-                simplified_cross = simplified_cross.append(pd.DataFrame({
+                list_of_dataframes.append(pd.DataFrame({
                     f"{MAGIK_X_POSITION_COLUMN_NAME}_x": [df_window[x_index][f"{MAGIK_X_POSITION_COLUMN_NAME}"].values[0]],
                     f"{MAGIK_X_POSITION_COLUMN_NAME}_y": [df_window[y_index][f"{MAGIK_X_POSITION_COLUMN_NAME}"].values[0]],
                     f"{MAGIK_Y_POSITION_COLUMN_NAME}_x": [df_window[x_index][f"{MAGIK_Y_POSITION_COLUMN_NAME}"].values[0]],
@@ -231,7 +215,9 @@ class LocalizationClassifier():
                     MAGIK_LABEL_COLUMN_NAME+"_y": [df_window[y_index][f"{MAGIK_LABEL_COLUMN_NAME}"].values[0]],
                     TIME_COLUMN_NAME+"_x": [df_window[x_index][f"{TIME_COLUMN_NAME}"].values[0]],
                     TIME_COLUMN_NAME+"_y": [df_window[y_index][f"{TIME_COLUMN_NAME}"].values[0]],
-                }), ignore_index=True)
+                }))
+
+            simplified_cross = pd.concat(list_of_dataframes, ignore_index=True)
 
             df_window = simplified_cross.copy()
             df_window = df_window[df_window['index_x'] != df_window['index_y']]
@@ -241,12 +227,12 @@ class LocalizationClassifier():
             
             edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
 
-            edges_dataframe = edges_dataframe.append(pd.DataFrame({
+            edges_dataframe = pd.concat([edges_dataframe, pd.DataFrame({
                 'index_1': [edge[0] for edge in edges],
                 'index_2': [edge[1] for edge in edges],
                 'distance': [value[0] for value in df_window[["distance"]].values.tolist()],
                 MAGIK_DATASET_COLUMN_NAME: [setid for _ in range(len(edges))]
-            }), ignore_index=True)
+            })], ignore_index=True)
 
             edges_dataframe = edges_dataframe.drop_duplicates()
 
