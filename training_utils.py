@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 
 
 def CustomGetSubSet():
@@ -195,3 +196,6 @@ def CustomEdgeBalancing():
             return graph, labels
 
     return inner
+
+def get_device():
+    return tf.device('/gpu:0' if len(tf.config.list_physical_devices('GPU')) == 1 else '/cpu:0')

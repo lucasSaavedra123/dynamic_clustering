@@ -26,6 +26,7 @@ class ClusterEdgeRemover():
             "partition_size": 10000,
             "epochs": 25,
             "batch_size": 1,
+            "training_set_in_epoch_size": 25
         }
 
     @classmethod
@@ -172,11 +173,8 @@ class ClusterEdgeRemover():
                 considered_edges_weights.reshape(1, considered_edges_weights.shape[0], considered_edges_weights.shape[1]),
             ]
 
-            with tf.device('/cpu:0'):
-                if apply_threshold:
-                    predictions[initial_index:final_index] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...]
-                else:
-                    predictions[initial_index:final_index] = (self.magik_architecture(v).numpy())[0, ...]
+            with get_device():
+                predictions[initial_index:final_index] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...] if apply_threshold else (self.magik_architecture(v).numpy())[0, ...]
 
         if not detect_clusters:
             return grapht[1][1], predictions
@@ -374,7 +372,7 @@ class ClusterEdgeRemover():
 
     @property
     def predictions_file_name(self):
-        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}.csv"
+        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.csv"
     
     @property
     def history_training_info_file_name(self):
@@ -452,7 +450,7 @@ class ClusterEdgeRemover():
             args = {
                 "batch_function": lambda graph: graph[0],
                 "label_function": lambda graph: graph[1],
-                "min_data_size": 512,
+                "min_data_size": self.hyperparameters["training_set_in_epoch_size"],
                 "batch_size": self.hyperparameters["batch_size"],
                 "use_multi_inputs": False,
                 **magik_variables.properties(),
@@ -462,6 +460,8 @@ class ClusterEdgeRemover():
 
             with generator:
                 self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"])
+
+            self.save_history_training_info()
 
             del generator
         
@@ -492,7 +492,6 @@ class ClusterEdgeRemover():
 
     def save_model(self):
         self.save_keras_model()
-        self.save_history_training_info()
 
     def save_keras_model(self):
         self.magik_architecture.save_weights(self.model_file_name)

@@ -8,7 +8,6 @@ from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 import deeptrack as dt
-import tensorflow as tf
 import numpy as np
 import pandas as pd
 from scipy.spatial import Delaunay
@@ -25,9 +24,10 @@ class LocalizationClassifier():
             "learning_rate": 0.001,
             "radius": 0.05,
             "nofframes": 11,
-            "partition_size": 100,
-            "epochs": 100,
+            "partition_size": 25000,
+            "epochs": 3,
             "batch_size": 1,
+            "training_set_in_epoch_size": 25
         }
 
     @classmethod
@@ -124,31 +124,42 @@ class LocalizationClassifier():
     def predict(self, magik_dataset, apply_threshold=True, verbose=True):
         magik_dataset = magik_dataset.copy()
 
-        frames_indexes = list(range(0, max(magik_dataset[FRAME_COLUMN_NAME]), self.hyperparameters["partition_size"]))
+        grapht = self.build_graph(magik_dataset, verbose=False)
 
-        iterator = tqdm.tqdm(frames_indexes) if verbose else frames_indexes
+        predictions = np.empty((len(grapht[0][0]), 1))
 
-        for frame_index in iterator:
-            aux_magik_dataset = magik_dataset[magik_dataset[FRAME_COLUMN_NAME] < frame_index + self.hyperparameters["partition_size"]]
-            aux_magik_dataset = aux_magik_dataset[frame_index <= aux_magik_dataset[FRAME_COLUMN_NAME]]
-            aux_magik_dataset[FRAME_COLUMN_NAME] = aux_magik_dataset[FRAME_COLUMN_NAME] - frame_index
-            original_index = aux_magik_dataset.index
-            aux_magik_dataset = aux_magik_dataset.copy().reset_index(drop=True)
+        number_of_nodes = len(grapht[0][0])
+        partitions_initial_index = list(range(0,number_of_nodes,self.hyperparameters['partition_size']))
 
-            grapht = self.build_graph(aux_magik_dataset, verbose=False)
+        for index, initial_index in enumerate(partitions_initial_index):
+            if index == len(partitions_initial_index)-1:
+                final_index = number_of_nodes
+            else:
+                final_index = partitions_initial_index[index+1]
+
+            considered_nodes = list(range(initial_index, final_index))
+            considered_nodes_features = grapht[0][0][considered_nodes]
+
+            considered_edges_positions = np.any( np.isin(grapht[0][2], considered_nodes), axis=-1)
+            considered_edges_features = grapht[0][1][considered_edges_positions]
+            considered_edges = grapht[0][2][considered_edges_positions]
+            considered_edges_weights = grapht[0][3][considered_edges_positions]
+
+            old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
+            considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
+            considered_edges = np.unique(considered_edges, axis=0) # remove duplicates
 
             v = [
-                grapht[0][0].reshape(1, grapht[0][0].shape[0], grapht[0][0].shape[1]),
-                grapht[0][1].reshape(1, grapht[0][1].shape[0], grapht[0][1].shape[1]),
-                grapht[0][2].reshape(1, grapht[0][2].shape[0], grapht[0][2].shape[1]),
-                grapht[0][3].reshape(1, grapht[0][3].shape[0], grapht[0][3].shape[1]),
+                considered_nodes_features.reshape(1, considered_nodes_features.shape[0], considered_nodes_features.shape[1]),
+                considered_edges_features.reshape(1, considered_edges_features.shape[0], considered_edges_features.shape[1]),
+                considered_edges.reshape(1, considered_edges.shape[0], considered_edges.shape[1]),
+                considered_edges_weights.reshape(1, considered_edges_weights.shape[0], considered_edges_weights.shape[1]),
             ]
 
-            with tf.device('/cpu:0'):
-                if apply_threshold:
-                    magik_dataset.loc[original_index,MAGIK_LABEL_COLUMN_NAME_PREDICTED] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...]
-                else:
-                    magik_dataset.loc[original_index,MAGIK_LABEL_COLUMN_NAME_PREDICTED] = (self.magik_architecture(v).numpy())[0, ...]
+            with get_device():
+                predictions[initial_index:final_index] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...] if apply_threshold else (self.magik_architecture(v).numpy())[0, ...]
+
+        magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = predictions
 
         if apply_threshold:
             magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int)
@@ -200,6 +211,10 @@ class LocalizationClassifier():
                 TIME_COLUMN_NAME+"_x": [],
                 TIME_COLUMN_NAME+"_y": []
             })
+
+            """
+            PUEDE SER QUE EL LIMITE DE MEMORIA QUE TENEMOS AHORA SE PUEDA SOLUCIONAR CON DASK. LEER!!!
+            """
 
             for edge in list_of_edges:
                 x_index = df_window["index"] == edge[0]
@@ -266,10 +281,6 @@ class LocalizationClassifier():
         return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}.h5"
 
     @property
-    def threshold_file_name(self):
-        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}.bin"
-
-    @property
     def history_training_info_file_name(self):
         return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}.json"
 
@@ -291,7 +302,7 @@ class LocalizationClassifier():
                 r = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=apply_threshold, verbose=False)
 
                 if save_predictions:
-                    r.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_{self.hyperparameters['radius']}_nofframes_{self.hyperparameters['nofframes']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
+                    r.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
 
                 true += r[MAGIK_LABEL_COLUMN_NAME].values.tolist()
                 pred += r[MAGIK_LABEL_COLUMN_NAME_PREDICTED].values.tolist()
@@ -343,7 +354,7 @@ class LocalizationClassifier():
             args = {
                 "batch_function": lambda graph: graph[0],
                 "label_function": lambda graph: graph[1],
-                "min_data_size": 10,
+                "min_data_size": self.hyperparameters["training_set_in_epoch_size"],
                 "batch_size": self.hyperparameters["batch_size"],
                 "use_multi_inputs": False,
                 **magik_variables.properties(),
@@ -351,11 +362,11 @@ class LocalizationClassifier():
 
             generator = ContinuousGraphGenerator(CustomGetFeature(train_full_graph, **magik_variables.properties()), **args)
 
-            device_name = '/gpu:0' if len(tf.config.list_physical_devices('GPU')) == 1 else '/cpu:0'
-
-            with tf.device(device_name):
+            with get_device():
                 with generator:
                     self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
+
+            self.save_history_training_info()
 
             del generator
 
@@ -380,30 +391,15 @@ class LocalizationClassifier():
         plt.xlabel("Predicted label", fontsize=15)
         plt.show()
 
-    def save_threshold(self):
-        with open(self.threshold_file_name, "w") as threshold_file:
-            threshold_file.write(str(self.threshold))
-
     def save_history_training_info(self):
         with open(self.history_training_info_file_name, "w") as json_file:
             json.dump(self.history_training_info, json_file)
 
     def save_model(self):
         self.save_keras_model()
-        self.save_threshold()
-        self.save_history_training_info()
 
     def save_keras_model(self):
         self.magik_architecture.save_weights(self.model_file_name)
-
-    def load_history_training_info(self):
-        try:
-            with open(self.history_training_info_file_name, "r") as json_file:
-                self.history_training_info = json.load(json_file)
-        except FileNotFoundError:
-            return None
-
-        return self.history_training_info
 
     def load_keras_model(self):
         try:
@@ -416,4 +412,3 @@ class LocalizationClassifier():
 
     def load_model(self):
         self.load_keras_model()
-        self.load_history_training_info()

@@ -1,4 +1,5 @@
 # Description: This file contains all the constants used in the project
+CUSTOM_CROSS_OPERATION_CHUNK_SIZE = 10000
 
 X_POSITION_COLUMN_NAME='x'
 Y_POSITION_COLUMN_NAME='y'
