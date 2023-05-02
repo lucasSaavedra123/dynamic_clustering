@@ -132,7 +132,7 @@ class ClusterEdgeRemover():
             set_dataframe = self.get_dataset_from_path(csv_file_path, set_number=set_index)
 
             if not set_dataframe.empty:
-                full_dataset = full_dataset.append(set_dataframe)
+                full_dataset = pd.concat([full_dataset, set_dataframe], ignore_index=True)
                 set_index += 1
 
         return full_dataset.reset_index(drop=True)
@@ -288,25 +288,13 @@ class ClusterEdgeRemover():
             new_index_to_old_index = {new_index:df_window.loc[new_index, 'index'] for new_index in df_window.index.values}
             list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
             list_of_edges = np.unique(list_of_edges, axis=0).tolist() # remove duplicates
-
-            simplified_cross = pd.DataFrame({
-                f"{MAGIK_X_POSITION_COLUMN_NAME}_x": [],
-                f"{MAGIK_X_POSITION_COLUMN_NAME}_y": [],
-                f"{MAGIK_Y_POSITION_COLUMN_NAME}_x": [],
-                f"{MAGIK_Y_POSITION_COLUMN_NAME}_y": [],
-                'index_x': [],
-                'index_y': [],
-                MAGIK_LABEL_COLUMN_NAME+"_x": [],
-                MAGIK_LABEL_COLUMN_NAME+"_y": [],
-                TIME_COLUMN_NAME+"_x": [],
-                TIME_COLUMN_NAME+"_y": []
-            })
+            list_of_dataframes = []
 
             for edge in list_of_edges:
                 x_index = df_window["index"] == edge[0]
                 y_index = df_window["index"] == edge[1]
 
-                simplified_cross = simplified_cross.append(pd.DataFrame({
+                list_of_dataframes.append(pd.DataFrame({
                     f"{MAGIK_X_POSITION_COLUMN_NAME}_x": [df_window[x_index][f"{MAGIK_X_POSITION_COLUMN_NAME}"].values[0]],
                     f"{MAGIK_X_POSITION_COLUMN_NAME}_y": [df_window[y_index][f"{MAGIK_X_POSITION_COLUMN_NAME}"].values[0]],
                     f"{MAGIK_Y_POSITION_COLUMN_NAME}_x": [df_window[x_index][f"{MAGIK_Y_POSITION_COLUMN_NAME}"].values[0]],
@@ -317,7 +305,9 @@ class ClusterEdgeRemover():
                     MAGIK_LABEL_COLUMN_NAME+"_y": [df_window[y_index][f"{MAGIK_LABEL_COLUMN_NAME}"].values[0]],
                     TIME_COLUMN_NAME+"_x": [df_window[x_index][f"{TIME_COLUMN_NAME}"].values[0]],
                     TIME_COLUMN_NAME+"_y": [df_window[y_index][f"{TIME_COLUMN_NAME}"].values[0]],
-                }), ignore_index=True)
+                }))
+
+            simplified_cross = pd.concat(list_of_dataframes, ignore_index=True)
 
             df_window = simplified_cross.copy()
             df_window = df_window[df_window['index_x'] != df_window['index_y']]
@@ -328,17 +318,18 @@ class ClusterEdgeRemover():
 
             if for_predict or not df_window['same_cluster'].all():
                 edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
-
-                new_edges_dataframe = new_edges_dataframe.append(pd.DataFrame({
+                
+                new_edges_dataframe = pd.concat([new_edges_dataframe, pd.DataFrame({
                     'index_1': [edge[0] for edge in edges],
                     'index_2': [edge[1] for edge in edges],
                     'distance': [value[0] for value in df_window[["distance"]].values.tolist()],
                     'same_cluster': [value[0] for value in df_window[["same_cluster"]].values.tolist()],
-                }), ignore_index=True)
+                })], ignore_index=True)
 
             new_edges_dataframe = new_edges_dataframe.drop_duplicates()
             new_edges_dataframe['set'] = setid
-            edges_dataframe = edges_dataframe.append(new_edges_dataframe, ignore_index=True)
+
+            edges_dataframe = pd.concat([edges_dataframe, new_edges_dataframe], ignore_index=True)
 
         edgefeatures = edges_dataframe[self.edge_features].to_numpy()
         sparseadjmtx = edges_dataframe[["index_1", "index_2"]].to_numpy().astype(int)
