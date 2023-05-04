@@ -15,6 +15,23 @@ import tqdm
 from deeptrack.models.gnns.generators import ContinuousGraphGenerator
 from CONSTANTS import *
 from training_utils import *
+import keras.backend as K
+
+def positive_rate(y_true, y_pred):
+    tp = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    tn = K.sum(K.round(K.clip((1 - y_true) * (1 - y_pred), 0, 1)))
+    fp = K.sum(K.round(K.clip((1 - y_true) * y_pred, 0, 1)))
+    fn = K.sum(K.round(K.clip(y_true * (1 - y_pred), 0, 1)))
+
+    return  (tp + fn) / (tp + tn + fp + fn)
+
+def negative_rate(y_true, y_pred):
+    tp = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    tn = K.sum(K.round(K.clip((1 - y_true) * (1 - y_pred), 0, 1)))
+    fp = K.sum(K.round(K.clip((1 - y_true) * y_pred, 0, 1)))
+    fn = K.sum(K.round(K.clip(y_true * (1 - y_pred), 0, 1)))
+
+    return  (fp + tn) / (tp + tn + fp + fn)
 
 
 class LocalizationClassifier():
@@ -24,7 +41,7 @@ class LocalizationClassifier():
             "learning_rate": 0.001,
             "radius": 0.05,
             "nofframes": 11,
-            "partition_size": 5000,
+            "partition_size": 3000,
             "epochs": 50,
             "batch_size": 1,
             "training_set_in_epoch_size": 512
@@ -72,7 +89,7 @@ class LocalizationClassifier():
         self.magik_architecture.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=self.hyperparameters['learning_rate']),
             loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
-            metrics=['accuracy', tf.keras.metrics.AUC()]
+            metrics=['accuracy', tf.keras.metrics.AUC(), positive_rate, negative_rate]
         )
 
         self.magik_architecture.summary()
@@ -307,7 +324,7 @@ class LocalizationClassifier():
                     dt.Value(full_graph)
                     >> dt.Lambda(CustomGetSubSet)
                     >> dt.Lambda(CustomGetSubGraph)
-                    >> dt.Lambda(CustomEdgeBalancing)
+                    >> dt.Lambda(CustomNodeBalancing)
                     >> dt.Lambda(
                         CustomAugmentCentroids,
                         rotate=lambda: np.random.rand() * 2 * np.pi,
@@ -334,9 +351,14 @@ class LocalizationClassifier():
 
             generator = ContinuousGraphGenerator(CustomGetFeature(train_full_graph, **magik_variables.properties()), **args)
 
+            class StopTrainingOnAccuracy(tf.keras.callbacks.Callback):
+                def on_epoch_end(self, epoch, logs={}):
+                    if logs.get('auc') >= 0.9:
+                        self.model.stop_training = True
+
             with get_device():
                 with generator:
-                    self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
+                    self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"], callbacks=[StopTrainingOnAccuracy()]).history
 
             self.save_history_training_info()
 

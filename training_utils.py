@@ -1,25 +1,32 @@
 import numpy as np
 import tensorflow as tf
-
+from collections import Counter
 
 def CustomGetSubSet():
     def inner(data):
         graph, labels, sets = data
 
-        randset= np.random.randint(np.max(sets[0][:, 0]) + 1)
+        retry = True
 
-        nodeidxs = np.where(sets[0][:, 0] == randset)[0]
-        edgeidxs = np.where(sets[1][:, 0] == randset)[0]
+        while retry:
+            randset= np.random.randint(np.max(sets[0][:, 0]) + 1)
 
-        node_features = graph[0][nodeidxs]
-        edge_features = graph[1][edgeidxs]
-        edge_connections = graph[2][edgeidxs] - np.min(nodeidxs)
+            nodeidxs = np.where(sets[0][:, 0] == randset)[0]
+            edgeidxs = np.where(sets[1][:, 0] == randset)[0]
 
-        weights = graph[3][edgeidxs]
+            node_features = graph[0][nodeidxs]
+            edge_features = graph[1][edgeidxs]
+            edge_connections = graph[2][edgeidxs] - np.min(nodeidxs)
 
-        node_labels = labels[0][nodeidxs]
-        edge_labels = labels[1][edgeidxs]
-        glob_labels = labels[2][randset]
+            weights = graph[3][edgeidxs]
+
+            node_labels = labels[0][nodeidxs]
+            edge_labels = labels[1][edgeidxs]
+            glob_labels = labels[2][randset]
+
+            counter = Counter(np.array(node_labels[:,0]))
+
+            retry = counter[0] == 0 or counter[1] == 0
 
         return (node_features, edge_features, edge_connections, weights), (
             node_labels,
@@ -33,8 +40,8 @@ def CustomGetSubGraph():
     def inner(data):
         graph, labels = data
 
-        min_num_nodes = 2500
-        max_num_nodes = 3000
+        min_num_nodes = 1000
+        max_num_nodes = 5000
 
         num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
 
