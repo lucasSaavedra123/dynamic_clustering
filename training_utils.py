@@ -36,12 +36,9 @@ def CustomGetSubSet():
 
     return inner
 
-def CustomGetSubGraph():
+def CustomGetSubGraph(min_num_nodes, max_num_nodes):
     def inner(data):
         graph, labels = data
-
-        min_num_nodes = 1000
-        max_num_nodes = 5000
 
         num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
 

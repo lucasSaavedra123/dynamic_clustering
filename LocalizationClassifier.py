@@ -11,6 +11,9 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import Delaunay
 import tqdm
+from sklearn.neighbors import kneighbors_graph
+import ghostml
+
 
 from deeptrack.models.gnns.generators import ContinuousGraphGenerator
 from CONSTANTS import *
@@ -38,11 +41,8 @@ class LocalizationClassifier():
     @classmethod
     def default_hyperparameters(cls):
         return {
-            "learning_rate": 0.001,
-            "radius": 0.05,
-            "nofframes": 11,
             "partition_size": 3000,
-            "epochs": 50,
+            "epochs": 5,
             "batch_size": 1,
             "training_set_in_epoch_size": 512
         }
@@ -50,10 +50,7 @@ class LocalizationClassifier():
     @classmethod
     def analysis_hyperparameters(cls):
         return {
-            #"learning_rate": [0.01, 0.001, 0.001],
-            "radius": [0.05, 0.075, 0.1, 0.125],
-            "nofframes": [1,3,5,7,9],
-            "batch_size": [1,2,4]
+            "partition_size": [1000,2000,3000,4000]
         }
 
     def __init__(self, height=10, width=10):
@@ -87,7 +84,7 @@ class LocalizationClassifier():
         )
 
         self.magik_architecture.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=self.hyperparameters['learning_rate']),
+            optimizer='adam',
             loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
             metrics=['accuracy', tf.keras.metrics.AUC(), positive_rate, negative_rate]
         )
@@ -104,6 +101,7 @@ class LocalizationClassifier():
 
         smlm_dataframe = smlm_dataframe.drop([CLUSTER_ID_COLUMN_NAME, PARTICLE_ID_COLUMN_NAME, "Unnamed: 0"], axis=1, errors="ignore")
         smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] / np.array([self.width, self.height]))
+        smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / smlm_dataframe[TIME_COLUMN_NAME].abs().max()
 
         smlm_dataframe[MAGIK_DATASET_COLUMN_NAME] = set_number
         smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(int)
@@ -162,9 +160,10 @@ class LocalizationClassifier():
             considered_edges = grapht[0][2][considered_edges_positions]
             considered_edges_weights = grapht[0][3][considered_edges_positions]
 
-            old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
-            considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
-            considered_edges = np.unique(considered_edges, axis=0) # remove duplicates
+            if considered_edges.size != 0:
+                old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
+                considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
+                considered_edges = np.unique(considered_edges, axis=0) # remove duplicates
 
             v = [
                 considered_nodes_features.reshape(1, considered_nodes_features.shape[0], considered_nodes_features.shape[1]),
@@ -177,11 +176,7 @@ class LocalizationClassifier():
                 predictions[initial_index:final_index] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...] if apply_threshold else (self.magik_architecture(v).numpy())[0, ...]
 
         magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = predictions
-
-        if apply_threshold:
-            magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int)
-        else:
-            magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(float)
+        magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int) if apply_threshold else magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(float)
 
         return magik_dataset
 
@@ -204,7 +199,7 @@ class LocalizationClassifier():
         for setid in iterator:
             df_window = full_nodes_dataset[full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index()
             simplices = Delaunay(df_window[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]].values).simplices
-
+            
             def less_first(a, b):
                 return [a,b] if a < b else [b,a]
 
@@ -267,15 +262,19 @@ class LocalizationClassifier():
 
     @property
     def model_file_name(self):
-        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}.h5"
+        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.h5"
 
     @property
     def history_training_info_file_name(self):
-        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}.json"
+        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.json"
 
     @property
     def predictions_file_name(self):
         return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.csv"
+
+    @property
+    def threshold_file_name(self):
+        return f"node_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.bin"
 
     def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True, check_if_predictions_file_name_exists=False):
         if check_if_predictions_file_name_exists and os.path.exists(self.predictions_file_name):
@@ -323,12 +322,14 @@ class LocalizationClassifier():
                 return (
                     dt.Value(full_graph)
                     >> dt.Lambda(CustomGetSubSet)
-                    >> dt.Lambda(CustomGetSubGraph)
-                    >> dt.Lambda(CustomNodeBalancing)
+                    >> dt.Lambda(CustomGetSubGraph,
+                        min_num_nodes=lambda: self.hyperparameters["partition_size"],
+                        max_num_nodes=lambda: self.hyperparameters["partition_size"]
+                    )
+                    #>> dt.Lambda(CustomNodeBalancing)
                     >> dt.Lambda(
                         CustomAugmentCentroids,
                         rotate=lambda: np.random.rand() * 2 * np.pi,
-                        translate=lambda: np.random.randn(2) * 0,
                         flip_x=lambda: np.random.randint(2),
                         flip_y=lambda: np.random.randint(2)
                     )
@@ -351,20 +352,35 @@ class LocalizationClassifier():
 
             generator = ContinuousGraphGenerator(CustomGetFeature(train_full_graph, **magik_variables.properties()), **args)
 
-            class StopTrainingOnAccuracy(tf.keras.callbacks.Callback):
-                def on_epoch_end(self, epoch, logs={}):
-                    if logs.get('auc') >= 0.9:
-                        self.model.stop_training = True
-
             with get_device():
                 with generator:
-                    self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"], callbacks=[StopTrainingOnAccuracy()]).history
+                    self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
 
             self.save_history_training_info()
 
             del generator
 
         del train_full_graph
+
+        if self.load_threshold() is None:
+            true = []
+            pred = []
+
+            true, pred = self.test_with_datasets_from_path(path, apply_threshold=False, save_result=False, verbose=True)
+
+            count = Counter(true)
+            positive_is_majority = count[1] > count[0]
+
+            if positive_is_majority:
+                true = 1 - np.array(true)
+                pred = 1 - np.array(pred)
+
+            thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
+
+            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC')
+
+            if positive_is_majority:
+                self.threshold = 1 - self.threshold
 
     def plot_confusion_matrix(self, ground_truth, Y_predicted, normalized=True):
         confusion_mat = confusion_matrix(y_true=ground_truth, y_pred=Y_predicted)
@@ -389,11 +405,16 @@ class LocalizationClassifier():
         with open(self.history_training_info_file_name, "w") as json_file:
             json.dump(self.history_training_info, json_file)
 
-    def save_model(self):
-        self.save_keras_model()
+    def save_threshold(self):
+        with open(self.threshold_file_name, "w") as threshold_file:
+            threshold_file.write(str(self.threshold))
 
     def save_keras_model(self):
         self.magik_architecture.save_weights(self.model_file_name)
+
+    def save_model(self):
+        self.save_keras_model()
+        self.save_threshold()
 
     def load_keras_model(self):
         try:
@@ -404,5 +425,15 @@ class LocalizationClassifier():
 
         return self.magik_architecture
 
+    def load_threshold(self):
+        try:
+            with open(self.threshold_file_name, "r") as threshold_file:
+                self.threshold = float(threshold_file.read())
+        except FileNotFoundError:
+            return None
+
+        return self.threshold
+
     def load_model(self):
         self.load_keras_model()
+        self.load_threshold()

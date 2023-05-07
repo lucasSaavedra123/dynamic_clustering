@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import Delaunay
 import networkx as nx
+import ghostml
 
 from training_utils import *
 from CONSTANTS import *
@@ -22,7 +23,6 @@ class ClusterEdgeRemover():
     @classmethod
     def default_hyperparameters(cls):
         return {
-            "learning_rate": 0.001,
             "partition_size": 10000,
             "epochs": 25,
             "batch_size": 1,
@@ -32,8 +32,7 @@ class ClusterEdgeRemover():
     @classmethod
     def analysis_hyperparameters(cls):
         return {
-            #"learning_rate": [0.1, 0.01, 0.001],
-            "batch_size": [1,2,4]
+            "partition_size": [1000,2000,3000,4000]
         }
 
     def __init__(self, height=10, width=10):
@@ -66,7 +65,7 @@ class ClusterEdgeRemover():
         )
 
         self.magik_architecture.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=self.hyperparameters['learning_rate']),
+            optimizer='adam',
             loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
             metrics=['accuracy', tf.keras.metrics.AUC()]
         )
@@ -91,7 +90,7 @@ class ClusterEdgeRemover():
 
         smlm_dataframe = smlm_dataframe.drop([CLUSTERIZED_COLUMN_NAME, CLUSTERIZED_COLUMN_NAME+'_predicted', PARTICLE_ID_COLUMN_NAME, "Unnamed: 0"], axis=1, errors="ignore")
         smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] / np.array([self.width, self.height]))
-        
+
         smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / smlm_dataframe[TIME_COLUMN_NAME].abs().max()
         smlm_dataframe[MAGIK_DATASET_COLUMN_NAME] = set_number
         smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(int)
@@ -343,7 +342,7 @@ class ClusterEdgeRemover():
 
     @property
     def model_file_name(self):
-        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}.h5"
+        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.h5"
 
     @property
     def predictions_file_name(self):
@@ -351,7 +350,7 @@ class ClusterEdgeRemover():
     
     @property
     def history_training_info_file_name(self):
-        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}.json"
+        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.json"
 
     def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True, detect_clusters=False, check_if_predictions_file_name_exists=False):
         assert not (save_predictions and not detect_clusters)
@@ -405,7 +404,10 @@ class ClusterEdgeRemover():
                 return (
                     dt.Value(full_graph)
                     >> dt.Lambda(CustomGetSubSet)
-                    >> dt.Lambda(CustomGetSubGraph)
+                    >> dt.Lambda(CustomGetSubGraph,
+                        min_num_nodes=lambda: self.hyperparameters["partition_size"],
+                        max_num_nodes=lambda: self.hyperparameters["partition_size"]
+                    )
                     >> dt.Lambda(CustomEdgeBalancing)
                     >> dt.Lambda(
                         CustomAugmentCentroids,
@@ -442,6 +444,27 @@ class ClusterEdgeRemover():
         
         del train_full_graph
 
+        if self.load_threshold() is None:
+            print("Running Ghost...")
+            true = []
+            pred = []
+
+            true, pred = self.test_with_datasets_from_path(path, apply_threshold=False, save_result=False, verbose=True)
+
+            count = Counter(true)
+            positive_is_majority = count[1] > count[0]
+
+            if positive_is_majority:
+                true = 1 - np.array(true)
+                pred = 1 - np.array(pred)
+
+            thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
+
+            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC')
+
+            if positive_is_majority:
+                self.threshold = 1 - self.threshold
+
     def plot_confusion_matrix(self, ground_truth, Y_predicted, normalized=True):
         confusion_mat = confusion_matrix(y_true=ground_truth, y_pred=Y_predicted)
 
@@ -467,6 +490,11 @@ class ClusterEdgeRemover():
 
     def save_model(self):
         self.save_keras_model()
+        self.save_threshold()
+
+    def save_threshold(self):
+        with open(self.threshold_file_name, "w") as threshold_file:
+            threshold_file.write(str(self.threshold))
 
     def save_keras_model(self):
         self.magik_architecture.save_weights(self.model_file_name)
@@ -480,5 +508,15 @@ class ClusterEdgeRemover():
 
         return self.magik_architecture
 
+    def load_threshold(self):
+        try:
+            with open(self.threshold_file_name, "r") as threshold_file:
+                self.threshold = float(threshold_file.read())
+        except FileNotFoundError:
+            return None
+
+        return self.threshold
+
     def load_model(self):
         self.load_keras_model()
+        self.load_threshold()

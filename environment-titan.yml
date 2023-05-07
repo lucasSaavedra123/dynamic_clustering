@@ -1,0 +1,9 @@
+name: anomalous_diffusion
+channels:
+  - defaults
+dependencies:
+  - python=3.9
+  - cudatoolkit=11.8.0
+variables:
+  TF_GPU_ALLOCATOR: cuda_malloc_async
+prefix: /home/lucas/miniconda3/envs/tf
