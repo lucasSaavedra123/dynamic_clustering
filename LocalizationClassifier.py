@@ -11,9 +11,8 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import Delaunay
 import tqdm
-from sklearn.neighbors import kneighbors_graph
 import ghostml
-
+from collections import Counter
 
 from deeptrack.models.gnns.generators import ContinuousGraphGenerator
 from CONSTANTS import *
@@ -50,7 +49,7 @@ class LocalizationClassifier():
     @classmethod
     def analysis_hyperparameters(cls):
         return {
-            "partition_size": [1000,2000,3000,4000]
+            "partition_size": [1000,2000,3000,4000,5000]
         }
 
     def __init__(self, height=10, width=10):
