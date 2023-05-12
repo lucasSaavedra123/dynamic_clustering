@@ -41,7 +41,7 @@ class LocalizationClassifier():
     def default_hyperparameters(cls):
         return {
             "partition_size": 3000,
-            "epochs": 5,
+            "epochs": 100,
             "batch_size": 1,
             "training_set_in_epoch_size": 512
         }
@@ -49,7 +49,7 @@ class LocalizationClassifier():
     @classmethod
     def analysis_hyperparameters(cls):
         return {
-            "partition_size": [1000,2000,3000,4000,5000]
+            "partition_size": [500,1000,2000,3000]
         }
 
     def __init__(self, height=10, width=10):
@@ -305,7 +305,7 @@ class LocalizationClassifier():
 
         return true, pred
 
-    def fit_with_datasets_from_path(self, path):
+    def fit_with_datasets_from_path(self, path, save_checkpoints=False):
         if os.path.exists(self.train_full_graph_file_name):
             fileObj = open(self.train_full_graph_file_name, 'rb')
             train_full_graph = pickle.load(fileObj)
@@ -320,7 +320,9 @@ class LocalizationClassifier():
             def CustomGetFeature(full_graph, **kwargs):
                 return (
                     dt.Value(full_graph)
-                    >> dt.Lambda(CustomGetSubSet)
+                    >> dt.Lambda(CustomGetSubSet,
+                        ignore_non_cluster_experiments=lambda: True
+                    )
                     >> dt.Lambda(CustomGetSubGraph,
                         min_num_nodes=lambda: self.hyperparameters["partition_size"],
                         max_num_nodes=lambda: self.hyperparameters["partition_size"]
@@ -357,6 +359,9 @@ class LocalizationClassifier():
 
             self.save_history_training_info()
 
+            if save_checkpoints:
+                self.save_keras_model()
+
             del generator
 
         del train_full_graph
@@ -380,6 +385,9 @@ class LocalizationClassifier():
 
             if positive_is_majority:
                 self.threshold = 1 - self.threshold
+
+            if save_checkpoints:
+                self.save_threshold()
 
     def plot_confusion_matrix(self, ground_truth, Y_predicted, normalized=True):
         confusion_mat = confusion_matrix(y_true=ground_truth, y_pred=Y_predicted)
