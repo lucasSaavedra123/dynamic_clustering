@@ -1,32 +1,29 @@
 import numpy as np
 import tensorflow as tf
-from collections import Counter
 
 
-def CustomGetSubSet(ignore_non_cluster_experiments):
+def CustomGetSubSet():
     def inner(data):
         graph, labels, sets = data
 
-        retry = True
+        randset= np.random.randint(np.max(sets[0][:, 0]) + 1)
 
-        while retry:
-            randset= np.random.randint(np.max(sets[0][:, 0]) + 1)
+        nodeidxs = np.where(sets[0][:, 0] == randset)[0]
+        edgeidxs = np.where(sets[1][:, 0] == randset)[0]
 
-            nodeidxs = np.where(sets[0][:, 0] == randset)[0]
-            edgeidxs = np.where(sets[1][:, 0] == randset)[0]
+        node_features = graph[0][nodeidxs]
+        edge_features = graph[1][edgeidxs]
+        edge_connections = graph[2][edgeidxs]
 
-            node_features = graph[0][nodeidxs]
-            edge_features = graph[1][edgeidxs]
-            edge_connections = graph[2][edgeidxs] - np.min(nodeidxs)
+        old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(np.array(nodeidxs))}
+        edge_connections = np.array(edge_connections)
+        edge_connections = np.vectorize(old_index_to_new_index.get)(edge_connections)
 
-            weights = graph[3][edgeidxs]
+        weights = graph[3][edgeidxs]
 
-            node_labels = labels[0][nodeidxs]
-            edge_labels = labels[1][edgeidxs]
-            glob_labels = labels[2][randset]
-
-            counter = Counter(np.array(node_labels[:,0]))
-            retry = ignore_non_cluster_experiments and (counter[0] == 0 or counter[1] == 0)
+        node_labels = labels[0][nodeidxs]
+        edge_labels = labels[1][edgeidxs]
+        glob_labels = labels[2][randset]
 
         return (node_features, edge_features, edge_connections, weights), (
             node_labels,
@@ -41,21 +38,25 @@ def CustomGetSubGraph(min_num_nodes, max_num_nodes):
         graph, labels = data
 
         num_nodes = np.random.randint(min_num_nodes, max_num_nodes+1)
-
         node_start = np.random.randint(max(len(graph[0]) - num_nodes, 1))
 
-        edge_connects_removed_node = np.any((graph[2] < node_start) | (graph[2] >= node_start + num_nodes),axis=-1)
+        considered_nodes = list(range(node_start, node_start + num_nodes))
+        considered_nodes_features = graph[0][considered_nodes]
 
-        node_features = graph[0][node_start : node_start + num_nodes]
-        edge_features = graph[1][~edge_connects_removed_node]
-        edge_connections = graph[2][~edge_connects_removed_node] - node_start
-        weights = graph[3][~edge_connects_removed_node]
-
-        node_labels = labels[0][node_start : node_start + num_nodes]
-        edge_labels = labels[1][~edge_connects_removed_node]
+        considered_edges_positions = np.all( np.isin(graph[2], considered_nodes), axis=-1)
+        considered_edges_features = graph[1][considered_edges_positions]
+        considered_edges = graph[2][considered_edges_positions]
+        considered_edges_weights = graph[3][considered_edges_positions]
+        
+        old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
+        considered_edges = np.array(considered_edges)
+        considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
+    
+        node_labels = labels[0][considered_nodes]
+        edge_labels = labels[1][considered_edges_positions]
         global_labels = labels[2]
 
-        return (node_features, edge_features, edge_connections, weights), (
+        return (considered_nodes_features, considered_edges_features, considered_edges, considered_edges_weights), (
             node_labels,
             edge_labels,
             global_labels,

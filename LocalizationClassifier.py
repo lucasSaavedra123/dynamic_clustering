@@ -49,7 +49,7 @@ class LocalizationClassifier():
     @classmethod
     def analysis_hyperparameters(cls):
         return {
-            "partition_size": [500,1000,2000,3000]
+            "partition_size": [500,1000,2000,3000,4000]
         }
 
     def __init__(self, height=10, width=10):
@@ -162,13 +162,22 @@ class LocalizationClassifier():
             if considered_edges.size != 0:
                 old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
                 considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
-                considered_edges = np.unique(considered_edges, axis=0) # remove duplicates
+                #considered_edges = np.unique(considered_edges, axis=0) # remove duplicates
 
+            """
             v = [
                 considered_nodes_features.reshape(1, considered_nodes_features.shape[0], considered_nodes_features.shape[1]),
                 considered_edges_features.reshape(1, considered_edges_features.shape[0], considered_edges_features.shape[1]),
                 considered_edges.reshape(1, considered_edges.shape[0], considered_edges.shape[1]),
                 considered_edges_weights.reshape(1, considered_edges_weights.shape[0], considered_edges_weights.shape[1]),
+            ]
+            """
+
+            v = [
+                np.expand_dims(considered_nodes_features, 0),
+                np.expand_dims(considered_edges_features, 0),
+                np.expand_dims(considered_edges, 0),
+                np.expand_dims(considered_edges_weights, 0),
             ]
 
             with get_device():
@@ -320,9 +329,7 @@ class LocalizationClassifier():
             def CustomGetFeature(full_graph, **kwargs):
                 return (
                     dt.Value(full_graph)
-                    >> dt.Lambda(CustomGetSubSet,
-                        ignore_non_cluster_experiments=lambda: True
-                    )
+                    >> dt.Lambda(CustomGetSubSet)
                     >> dt.Lambda(CustomGetSubGraph,
                         min_num_nodes=lambda: self.hyperparameters["partition_size"],
                         max_num_nodes=lambda: self.hyperparameters["partition_size"]
