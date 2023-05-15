@@ -44,6 +44,7 @@ class LocalizationClassifier():
             "epochs": 100,
             "batch_size": 1,
             "training_set_in_epoch_size": 512
+            "ignore_no_clusters_experiments_during_training": True
         }
 
     @classmethod
@@ -162,16 +163,6 @@ class LocalizationClassifier():
             if considered_edges.size != 0:
                 old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
                 considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
-                #considered_edges = np.unique(considered_edges, axis=0) # remove duplicates
-
-            """
-            v = [
-                considered_nodes_features.reshape(1, considered_nodes_features.shape[0], considered_nodes_features.shape[1]),
-                considered_edges_features.reshape(1, considered_edges_features.shape[0], considered_edges_features.shape[1]),
-                considered_edges.reshape(1, considered_edges.shape[0], considered_edges.shape[1]),
-                considered_edges_weights.reshape(1, considered_edges_weights.shape[0], considered_edges_weights.shape[1]),
-            ]
-            """
 
             v = [
                 np.expand_dims(considered_nodes_features, 0),
@@ -295,13 +286,16 @@ class LocalizationClassifier():
             iterator = tqdm.tqdm(self.get_dataset_file_paths_from(path)) if verbose else self.get_dataset_file_paths_from(path)
 
             for csv_file_name in iterator:
-                r = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=apply_threshold, verbose=False)
+                dataset = self.get_dataset_from_path(csv_file_name)
 
-                if save_predictions:
-                    r.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
+                if not self.hyperparameters["ignore_no_clusters_experiments_during_training"] or not (not apply_threshold and len(dataset[dataset['solution'] == 1]) == 0):
+                    r = self.predict(dataset, apply_threshold=apply_threshold, verbose=False)
 
-                true += r[MAGIK_LABEL_COLUMN_NAME].values.tolist()
-                pred += r[MAGIK_LABEL_COLUMN_NAME_PREDICTED].values.tolist()
+                    if save_predictions:
+                        r.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
+
+                    true += r[MAGIK_LABEL_COLUMN_NAME].values.tolist()
+                    pred += r[MAGIK_LABEL_COLUMN_NAME_PREDICTED].values.tolist()
 
             if save_result:
                 pd.DataFrame({
@@ -329,7 +323,9 @@ class LocalizationClassifier():
             def CustomGetFeature(full_graph, **kwargs):
                 return (
                     dt.Value(full_graph)
-                    >> dt.Lambda(CustomGetSubSet)
+                    >> dt.Lambda(CustomGetSubSet,
+                        ignore_non_cluster_experiments=lambda: self.hyperparameters["ignore_no_clusters_experiments_during_training"]
+                    )
                     >> dt.Lambda(CustomGetSubGraph,
                         min_num_nodes=lambda: self.hyperparameters["partition_size"],
                         max_num_nodes=lambda: self.hyperparameters["partition_size"]
