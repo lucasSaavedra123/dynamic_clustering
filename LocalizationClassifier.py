@@ -17,24 +17,6 @@ from collections import Counter
 from deeptrack.models.gnns.generators import ContinuousGraphGenerator
 from CONSTANTS import *
 from training_utils import *
-import keras.backend as K
-
-def positive_rate(y_true, y_pred):
-    tp = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-    tn = K.sum(K.round(K.clip((1 - y_true) * (1 - y_pred), 0, 1)))
-    fp = K.sum(K.round(K.clip((1 - y_true) * y_pred, 0, 1)))
-    fn = K.sum(K.round(K.clip(y_true * (1 - y_pred), 0, 1)))
-
-    return  (tp + fn) / (tp + tn + fp + fn)
-
-def negative_rate(y_true, y_pred):
-    tp = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-    tn = K.sum(K.round(K.clip((1 - y_true) * (1 - y_pred), 0, 1)))
-    fp = K.sum(K.round(K.clip((1 - y_true) * y_pred, 0, 1)))
-    fn = K.sum(K.round(K.clip(y_true * (1 - y_pred), 0, 1)))
-
-    return  (fp + tn) / (tp + tn + fp + fn)
-
 
 class LocalizationClassifier():
     @classmethod
@@ -43,7 +25,7 @@ class LocalizationClassifier():
             "partition_size": 3000,
             "epochs": 100,
             "batch_size": 1,
-            "training_set_in_epoch_size": 512
+            "training_set_in_epoch_size": 512,
             "ignore_no_clusters_experiments_during_training": True
         }
 
@@ -89,7 +71,7 @@ class LocalizationClassifier():
             metrics=['accuracy', tf.keras.metrics.AUC(), positive_rate, negative_rate]
         )
 
-        self.magik_architecture.summary()
+        #self.magik_architecture.summary()
 
     def transform_smlm_dataset_to_magik_dataframe(self, smlm_dataframe, set_number=0):
         smlm_dataframe = smlm_dataframe.rename(columns={
@@ -326,7 +308,7 @@ class LocalizationClassifier():
                     >> dt.Lambda(CustomGetSubSet,
                         ignore_non_cluster_experiments=lambda: self.hyperparameters["ignore_no_clusters_experiments_during_training"]
                     )
-                    >> dt.Lambda(CustomGetSubGraph,
+                    >> dt.Lambda(CustomGetSubGraphByNumberOfNodes,
                         min_num_nodes=lambda: self.hyperparameters["partition_size"],
                         max_num_nodes=lambda: self.hyperparameters["partition_size"]
                     )

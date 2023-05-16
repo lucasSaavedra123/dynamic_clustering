@@ -1,9 +1,24 @@
-import numpy as np
-import tensorflow as tf
-
-
 from collections import Counter
 
+import numpy as np
+import tensorflow as tf
+import keras.backend as K
+
+def positive_rate(y_true, y_pred):
+    tp = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    tn = K.sum(K.round(K.clip((1 - y_true) * (1 - y_pred), 0, 1)))
+    fp = K.sum(K.round(K.clip((1 - y_true) * y_pred, 0, 1)))
+    fn = K.sum(K.round(K.clip(y_true * (1 - y_pred), 0, 1)))
+
+    return  (tp + fn) / (tp + tn + fp + fn)
+
+def negative_rate(y_true, y_pred):
+    tp = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    tn = K.sum(K.round(K.clip((1 - y_true) * (1 - y_pred), 0, 1)))
+    fp = K.sum(K.round(K.clip((1 - y_true) * y_pred, 0, 1)))
+    fn = K.sum(K.round(K.clip(y_true * (1 - y_pred), 0, 1)))
+
+    return  (fp + tn) / (tp + tn + fp + fn)
 
 def CustomGetSubSet(ignore_non_cluster_experiments):
     def inner(data):
@@ -71,7 +86,7 @@ def CustomGetSubSet():
     return inner
 """
 
-def CustomGetSubGraph(min_num_nodes, max_num_nodes):
+def CustomGetSubGraphByNumberOfNodes(min_num_nodes, max_num_nodes):
     def inner(data):
         graph, labels = data
 
@@ -92,6 +107,35 @@ def CustomGetSubGraph(min_num_nodes, max_num_nodes):
     
         node_labels = labels[0][considered_nodes]
         edge_labels = labels[1][considered_edges_positions]
+        global_labels = labels[2]
+
+        return (considered_nodes_features, considered_edges_features, considered_edges, considered_edges_weights), (
+            node_labels,
+            edge_labels,
+            global_labels,
+        )
+
+    return inner
+
+def CustomGetSubGraphByNumberOfEdges(min_num_edges, max_num_edges):
+    def inner(data):
+        graph, labels = data
+
+        num_edges = np.random.randint(min_num_edges, max_num_edges+1)
+        edge_start = np.random.randint(max(len(graph[1]) - num_edges, 1))
+
+        considered_edges_features = graph[1][edge_start:edge_start+num_edges]
+        considered_edges = graph[2][edge_start:edge_start+num_edges]
+        considered_edges_weights = graph[3][edge_start:edge_start+num_edges]
+
+        considered_nodes = np.unique(considered_edges.flatten())
+        considered_nodes_features = graph[0][considered_nodes]
+
+        old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
+        considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
+    
+        node_labels = labels[0][considered_nodes]
+        edge_labels = labels[1][edge_start:edge_start+num_edges]
         global_labels = labels[2]
 
         return (considered_nodes_features, considered_edges_features, considered_edges, considered_edges_weights), (

@@ -24,15 +24,15 @@ class ClusterEdgeRemover():
     def default_hyperparameters(cls):
         return {
             "partition_size": 10000,
-            "epochs": 25,
+            "epochs": 10,
             "batch_size": 1,
-            "training_set_in_epoch_size": 25
+            "training_set_in_epoch_size": 512
         }
 
     @classmethod
     def analysis_hyperparameters(cls):
         return {
-            "partition_size": [1000,2000,3000,4000]
+            "partition_size": [500,1000,2000,3000,4000]
         }
 
     def __init__(self, height=10, width=10):
@@ -47,7 +47,7 @@ class ClusterEdgeRemover():
 
     @property
     def node_features(self):
-        return [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
+        return [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]
 
     @property
     def edge_features(self):
@@ -67,10 +67,10 @@ class ClusterEdgeRemover():
         self.magik_architecture.compile(
             optimizer='adam',
             loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
-            metrics=['accuracy', tf.keras.metrics.AUC()]
+            metrics=['accuracy', tf.keras.metrics.AUC(), positive_rate, negative_rate]
         )
 
-        self.magik_architecture.summary()
+        #self.magik_architecture.summary()
 
     def transform_smlm_dataset_to_magik_dataframe(self, smlm_dataframe, set_number=0, ignored_non_clustered_localizations=True):
         smlm_dataframe = smlm_dataframe.rename(columns={
@@ -163,13 +163,12 @@ class ClusterEdgeRemover():
 
             old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
             considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
-            considered_edges = np.unique(considered_edges, axis=0) # remove duplicates
 
             v = [
-                considered_nodes_features.reshape(1, considered_nodes_features.shape[0], considered_nodes_features.shape[1]),
-                considered_edges_features.reshape(1, considered_edges_features.shape[0], considered_edges_features.shape[1]),
-                considered_edges.reshape(1, considered_edges.shape[0], considered_edges.shape[1]),
-                considered_edges_weights.reshape(1, considered_edges_weights.shape[0], considered_edges_weights.shape[1]),
+                np.expand_dims(considered_nodes_features, 0),
+                np.expand_dims(considered_edges_features, 0),
+                np.expand_dims(considered_edges, 0),
+                np.expand_dims(considered_edges_weights, 0),
             ]
 
             with get_device():
@@ -352,6 +351,10 @@ class ClusterEdgeRemover():
     def history_training_info_file_name(self):
         return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.json"
 
+    @property
+    def threshold_file_name(self):
+        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.bin"
+
     def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True, detect_clusters=False, check_if_predictions_file_name_exists=False):
         assert not (save_predictions and not detect_clusters)
         assert not (save_result and detect_clusters)
@@ -403,12 +406,14 @@ class ClusterEdgeRemover():
             def CustomGetFeature(full_graph, **kwargs):
                 return (
                     dt.Value(full_graph)
-                    >> dt.Lambda(CustomGetSubSet)
-                    >> dt.Lambda(CustomGetSubGraph,
-                        min_num_nodes=lambda: self.hyperparameters["partition_size"],
-                        max_num_nodes=lambda: self.hyperparameters["partition_size"]
+                    >> dt.Lambda(CustomGetSubSet,
+                        ignore_non_cluster_experiments= lambda: False
                     )
-                    >> dt.Lambda(CustomEdgeBalancing)
+                    >> dt.Lambda(CustomGetSubGraphByNumberOfEdges,
+                        min_num_edges=lambda: self.hyperparameters["partition_size"],
+                        max_num_edges=lambda: self.hyperparameters["partition_size"]
+                    )
+                    #>> dt.Lambda(CustomEdgeBalancing)
                     >> dt.Lambda(
                         CustomAugmentCentroids,
                         rotate=lambda: np.random.rand() * 2 * np.pi,
@@ -435,8 +440,9 @@ class ClusterEdgeRemover():
 
             generator = ContinuousGraphGenerator(CustomGetFeature(train_full_graph, **magik_variables.properties()), **args)
 
-            with generator:
-                self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"])
+            with get_device():
+                with generator:
+                    self.history_training_info = self.magik_architecture.fit(generator, epochs=self.hyperparameters["epochs"]).history
 
             self.save_history_training_info()
 
