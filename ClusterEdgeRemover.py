@@ -192,8 +192,8 @@ class ClusterEdgeRemover():
         #remaining_edges_weights = 1 / np.delete(grapht[0][1], edges_to_remove, axis=0) #Inverse Distance Weight
 
         G=nx.Graph()
-        #G.add_edges_from(remaining_edges_keep) #Unweight Graph
-        G.add_weighted_edges_from(np.hstack((remaining_edges_keep, remaining_edges_weights)))  #Weighted Graph
+        G.add_edges_from(remaining_edges_keep) #Unweight Graph
+        #G.add_weighted_edges_from(np.hstack((remaining_edges_keep, remaining_edges_weights)))  #Weighted Graph
 
         cluster_sets = []
 
@@ -218,10 +218,8 @@ class ClusterEdgeRemover():
         cluster_sets = nx.community.greedy_modularity_communities(G, weight='weight')
         """
 
-        """
         #Greedy Modularity without Weights
         cluster_sets = nx.community.greedy_modularity_communities(G, weight=None)
-        """
 
         magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
