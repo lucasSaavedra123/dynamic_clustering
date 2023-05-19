@@ -15,6 +15,8 @@ from scipy.spatial import Delaunay
 import networkx as nx
 import ghostml
 
+from infomap import Infomap
+
 from training_utils import *
 from CONSTANTS import *
 
@@ -177,55 +179,48 @@ class ClusterEdgeRemover():
         if not detect_clusters:
             return grapht[1][1], predictions
 
-        edges_to_remove = np.where(predictions == 0)[0]
-        remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
-        remaining_edges_weights = np.delete(grapht[0][1], edges_to_remove, axis=0)
-
         """
         As the cluster detection is sensible to the edge pruning (if only one edge is misclassified as positive, two clusters are merged),
         detected connected components should be segmented to avoid this problem. If two clusters are merged and the performance of the
         edge classifier is too high, both clusters may be segmentated maximizing the modularity of graph partition. Hint: Levounian
         """
-        cluster_sets = []
+
+        edges_to_remove = np.where(predictions == 0)[0]
+        remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
+        
+        remaining_edges_weights = np.delete(grapht[0][1], edges_to_remove, axis=0) #Distance Weight
+        #remaining_edges_weights = 1 / np.delete(grapht[0][1], edges_to_remove, axis=0) #Inverse Distance Weight
 
         G=nx.Graph()
-        G.add_edges_from(remaining_edges_keep)
-        #G.add_weighted_edges_from(np.hstack((remaining_edges_keep, remaining_edges_weights)))
+        #G.add_edges_from(remaining_edges_keep) #Unweight Graph
+        G.add_weighted_edges_from(np.hstack((remaining_edges_keep, remaining_edges_weights)))  #Weighted Graph
 
-        #S = [G.subgraph(c).copy() for c in nx.connected_components(G)]
-
-        #for subset in S:
-        #    cluster_sets += nx.community.louvain_communities(subset)
-
-        cluster_sets = nx.community.louvain_communities(G)
-        #cluster_sets = nx.connected_components(G)
-
-        """
-        im = Infomap(two_level=True, silent=True, num_trials=20)
-        im.add_networkx_graph(G)
-        im.run()
-
-        modules = im.get_modules()
-        cluster_sets = [set() for _ in range(len(set(modules.values())))]
-        [cluster_sets[c - 1].add(n) for n, c in modules.items()]
-        """
-
-        """
         cluster_sets = []
-        for i in range(len(remaining_edges_keep)):
-            cluster_assigned = False
-            if len(cluster_sets) == 0:
-                cluster_sets.append(set([remaining_edges_keep[i][0], remaining_edges_keep[i][1]]))
-            else:
-                for index, s in enumerate(cluster_sets):
-                    if remaining_edges_keep[i][0] in s or remaining_edges_keep[i][1] in s:
-                        s.add(remaining_edges_keep[i][0])
-                        s.add(remaining_edges_keep[i][1])
-                        cluster_assigned = True
-                        break
 
-                if not cluster_assigned:
-                    cluster_sets.append(set([remaining_edges_keep[i][0], remaining_edges_keep[i][1]]))
+        """
+        #Connected Components
+        
+        cluster_sets = nx.connected_components(G)
+        """
+
+        """
+        #Louvain Method with Weights
+        cluster_sets = nx.community.louvain_communities(G, weight='weight')
+        """
+
+        """
+        #Louvain Method without Weights
+        cluster_sets = nx.community.louvain_communities(G, weight=None)
+        """
+
+        """
+        #Greedy Modularity with Weights
+        cluster_sets = nx.community.greedy_modularity_communities(G, weight='weight')
+        """
+
+        """
+        #Greedy Modularity without Weights
+        cluster_sets = nx.community.greedy_modularity_communities(G, weight=None)
         """
 
         magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
