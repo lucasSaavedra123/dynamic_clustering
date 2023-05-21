@@ -14,8 +14,10 @@ import pandas as pd
 from scipy.spatial import Delaunay
 import networkx as nx
 import ghostml
-
-from infomap import Infomap
+from sklearn.cluster import AgglomerativeClustering, KMeans, DBSCAN
+from hdbscan import HDBSCAN
+from sklearn.decomposition import PCA
+import alphashape
 
 from training_utils import *
 from CONSTANTS import *
@@ -188,7 +190,7 @@ class ClusterEdgeRemover():
         edges_to_remove = np.where(predictions == 0)[0]
         remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
         
-        remaining_edges_weights = np.delete(grapht[0][1], edges_to_remove, axis=0) #Distance Weight
+        #remaining_edges_weights = np.delete(grapht[0][1], edges_to_remove, axis=0) #Distance Weight
         #remaining_edges_weights = 1 / np.delete(grapht[0][1], edges_to_remove, axis=0) #Inverse Distance Weight
 
         G=nx.Graph()
