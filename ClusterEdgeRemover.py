@@ -15,8 +15,6 @@ from scipy.spatial import Delaunay
 import networkx as nx
 import ghostml
 from sklearn.cluster import AgglomerativeClustering
-from hdbscan import HDBSCAN
-from sklearn.decomposition import PCA
 import alphashape
 from shapely.geometry import Point
 
@@ -93,12 +91,14 @@ class ClusterEdgeRemover():
             else:
                 smlm_dataframe = smlm_dataframe[smlm_dataframe['clusterized'] == 1]
 
-        smlm_dataframe = smlm_dataframe.drop([CLUSTERIZED_COLUMN_NAME, CLUSTERIZED_COLUMN_NAME+'_predicted', PARTICLE_ID_COLUMN_NAME, "Unnamed: 0"], axis=1, errors="ignore")
+        smlm_dataframe = smlm_dataframe.drop([CLUSTERIZED_COLUMN_NAME, CLUSTERIZED_COLUMN_NAME+'_predicted', "Unnamed: 0"], axis=1, errors="ignore")
         smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] / np.array([self.width, self.height]))
 
         smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / smlm_dataframe[TIME_COLUMN_NAME].abs().max()
         smlm_dataframe[MAGIK_DATASET_COLUMN_NAME] = set_number
-        smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(int)
+
+        if MAGIK_LABEL_COLUMN_NAME in smlm_dataframe.columns:
+            smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(int)
         smlm_dataframe[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
         return smlm_dataframe.reset_index(drop=True)
@@ -111,8 +111,8 @@ class ClusterEdgeRemover():
             MAGIK_LABEL_COLUMN_NAME_PREDICTED: CLUSTER_ID_COLUMN_NAME+"_predicted",
         })
 
-        magik_dataframe.loc[:, magik_dataframe.columns.str.contains(X_POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(X_POSITION_COLUMN_NAME)] * np.array([self.width]))
-        magik_dataframe.loc[:, magik_dataframe.columns.str.contains(Y_POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(Y_POSITION_COLUMN_NAME)] * np.array([self.height]))
+        magik_dataframe.loc[:, X_POSITION_COLUMN_NAME] = (magik_dataframe.loc[:, X_POSITION_COLUMN_NAME] * np.array([self.width]))
+        magik_dataframe.loc[:, Y_POSITION_COLUMN_NAME] = (magik_dataframe.loc[:, Y_POSITION_COLUMN_NAME] * np.array([self.height]))
 
         magik_dataframe = magik_dataframe.drop(MAGIK_DATASET_COLUMN_NAME, axis=1)
 
@@ -236,13 +236,13 @@ class ClusterEdgeRemover():
             magik_dataset[MAGIK_LABEL_COLUMN_NAME] = magik_dataset[MAGIK_LABEL_COLUMN_NAME].astype(int)
 
 
-        cluster_indexes_list = list(set(magik_dataset['solution_predicted']))
+        cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
         cluster_indexes_list.remove(0)
         max_index = max(cluster_indexes_list)
         offset = 1
 
         for index in cluster_indexes_list:
-            cluster_by_index = magik_dataset[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]][magik_dataset['solution_predicted'] == index]
+            cluster_by_index = magik_dataset[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]][magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == index]
             points_index = cluster_by_index.index
             points = cluster_by_index.values
             stop = False
@@ -281,23 +281,32 @@ class ClusterEdgeRemover():
             
             labels = AgglomerativeClustering(n_clusters=picked_n_clusters, linkage='ward').fit_predict(points[:,0:2])
             #labels = MeanShift(n_jobs=-1).fit_predict(points[:,0:2]) #With Mean Shift
-            magik_dataset.loc[points_index, 'solution_predicted'] = labels + offset + max_index
+            magik_dataset.loc[points_index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = labels + offset + max_index
             offset += max(labels) + 1
 
-        cluster_indexes_list = list(set(magik_dataset['solution_predicted']))
+        cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
         cluster_indexes_list.remove(0)
 
-        unclusterized_points = magik_dataset[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]][magik_dataset['solution_predicted'] == 0].values
+        unclusterized_points = magik_dataset[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]][magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 0].values
         unclusterized_points_index = magik_dataset.index.values
         unclusterized_info = [element for element in zip(unclusterized_points_index, unclusterized_points)]
 
         for cluster_index in cluster_indexes_list:
-            magik_dataset_by_cluster_index = magik_dataset[magik_dataset['solution_predicted'] == cluster_index]
+            magik_dataset_by_cluster_index = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == cluster_index]
             cluster_polygon = alphashape.alphashape(magik_dataset_by_cluster_index[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]].values, 0)
 
             for info in unclusterized_info:
-                if cluster_polygon.contains(Point(*info[1])) and magik_dataset.loc[info[0], 'solution_predicted'] == 0:
-                    magik_dataset.loc[info[0], 'solution_predicted'] = cluster_index
+                if cluster_polygon.contains(Point(*info[1])) and magik_dataset.loc[info[0], MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 0:
+                    magik_dataset.loc[info[0], MAGIK_LABEL_COLUMN_NAME_PREDICTED] = cluster_index
+
+        cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
+        cluster_indexes_list.remove(0)
+
+        for cluster_index in cluster_indexes_list:
+            magik_dataset_by_cluster_index = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == cluster_index]
+
+            if len(set(magik_dataset_by_cluster_index[PARTICLE_ID_COLUMN_NAME].values)) == 1:
+                magik_dataset.loc[magik_dataset_by_cluster_index.index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
         if original_dataset_path is not None:
             original_dataset = self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(original_dataset_path), ignored_non_clustered_localizations=False)
@@ -356,7 +365,11 @@ class ClusterEdgeRemover():
             df_window['distance-x'] = df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_y"]
             df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
             df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
-            df_window['same_cluster'] = (df_window[MAGIK_LABEL_COLUMN_NAME+"_x"] == df_window[MAGIK_LABEL_COLUMN_NAME+"_y"])
+
+            if not for_predict:
+                df_window['same_cluster'] = (df_window[MAGIK_LABEL_COLUMN_NAME+"_x"] == df_window[MAGIK_LABEL_COLUMN_NAME+"_y"])
+            else:
+                df_window['same_cluster'] = False
 
             if for_predict or not df_window['same_cluster'].all():
                 edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
