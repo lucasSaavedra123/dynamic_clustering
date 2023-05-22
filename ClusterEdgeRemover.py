@@ -14,10 +14,11 @@ import pandas as pd
 from scipy.spatial import Delaunay
 import networkx as nx
 import ghostml
-from sklearn.cluster import AgglomerativeClustering, KMeans, DBSCAN
+from sklearn.cluster import AgglomerativeClustering
 from hdbscan import HDBSCAN
 from sklearn.decomposition import PCA
 import alphashape
+from shapely.geometry import Point
 
 from training_utils import *
 from CONSTANTS import *
@@ -233,6 +234,70 @@ class ClusterEdgeRemover():
 
         if MAGIK_LABEL_COLUMN_NAME in magik_dataset.columns:
             magik_dataset[MAGIK_LABEL_COLUMN_NAME] = magik_dataset[MAGIK_LABEL_COLUMN_NAME].astype(int)
+
+
+        cluster_indexes_list = list(set(magik_dataset['solution_predicted']))
+        cluster_indexes_list.remove(0)
+        max_index = max(cluster_indexes_list)
+        offset = 1
+
+        for index in cluster_indexes_list:
+            cluster_by_index = magik_dataset[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]][magik_dataset['solution_predicted'] == index]
+            points_index = cluster_by_index.index
+            points = cluster_by_index.values
+            stop = False
+            n_clusters = 2
+            picked_n_clusters = None
+
+            while not stop:
+                if len(points) == n_clusters:
+                    picked_n_clusters = 1
+                    break
+
+                labels = AgglomerativeClustering(n_clusters=n_clusters, linkage='ward').fit_predict(points[:,0:2])
+
+                alphashapes_list = []
+
+                for label in set(labels):
+                    cluster = points[:,0:2][labels == label]
+
+                    if len(cluster) > 1:
+                        alphashapes_list.append(alphashape.alphashape(cluster, 0))
+
+                for a_i in range(0, len(alphashapes_list)):
+                    for a_j in range(a_i+1, len(alphashapes_list)):
+                        if alphashapes_list[a_i].intersects(alphashapes_list[a_j]):
+                            stop = True
+                            picked_n_clusters = n_clusters - 1
+                            break
+
+                    if stop:
+                        break
+
+                if stop:
+                    break
+                else:
+                    n_clusters += 1
+            
+            labels = AgglomerativeClustering(n_clusters=picked_n_clusters, linkage='ward').fit_predict(points[:,0:2])
+            #labels = MeanShift(n_jobs=-1).fit_predict(points[:,0:2]) #With Mean Shift
+            magik_dataset.loc[points_index, 'solution_predicted'] = labels + offset + max_index
+            offset += max(labels) + 1
+
+        cluster_indexes_list = list(set(magik_dataset['solution_predicted']))
+        cluster_indexes_list.remove(0)
+
+        unclusterized_points = magik_dataset[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]][magik_dataset['solution_predicted'] == 0].values
+        unclusterized_points_index = magik_dataset.index.values
+        unclusterized_info = [element for element in zip(unclusterized_points_index, unclusterized_points)]
+
+        for cluster_index in cluster_indexes_list:
+            magik_dataset_by_cluster_index = magik_dataset[magik_dataset['solution_predicted'] == cluster_index]
+            cluster_polygon = alphashape.alphashape(magik_dataset_by_cluster_index[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]].values, 0)
+
+            for info in unclusterized_info:
+                if cluster_polygon.contains(Point(*info[1])) and magik_dataset.loc[info[0], 'solution_predicted'] == 0:
+                    magik_dataset.loc[info[0], 'solution_predicted'] = cluster_index
 
         if original_dataset_path is not None:
             original_dataset = self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(original_dataset_path), ignored_non_clustered_localizations=False)
