@@ -31,3 +31,14 @@ mv utils.pyx utils.py
 rm *.so *.pyi
 rm -r ./ext
 ```
+
+## Docker Image for Dynamic Simulations
+
+The proyect was executed on Windows to avoid Linux virtualizations. However, we noticed that these simulation run faster on Linux systems. We used Docker to run simulations and we used the following code to run it:
+
+```
+docker build -t dynamic_simulations .
+docker run -i -v dynamic_simulation_files:/usr/src/app/datasets -t dynamic_simulations bash
+```
+
+Once the shell is open, follow the instructions of the first part.
