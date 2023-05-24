@@ -40,3 +40,5 @@ As the proyect was executen on Windows, we avoided Linux virtualizations and sim
 docker build -t dynamic_simulations .
 docker run -i -v dynamic_simulation_files:/usr/src/app/datasets -t dynamic_simulations bash
 ```
+
+Once the shell is open, follow the instructions of the first part.
