@@ -31,3 +31,12 @@ mv utils.pyx utils.py
 rm *.so *.pyi
 rm -r ./ext
 ```
+
+## Simulation with Docker
+
+As the proyect was executen on Windows, we avoided Linux virtualizations and simulations are faster on Linux. We used Docker to run simulations and we used the following code to run it:
+
+```
+docker build -t dynamic_simulations .
+docker run -i -v dynamic_simulation_files:/usr/src/app/datasets -t dynamic_simulations bash
+```
