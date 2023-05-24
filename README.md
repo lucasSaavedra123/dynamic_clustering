@@ -32,9 +32,9 @@ rm *.so *.pyi
 rm -r ./ext
 ```
 
-## Simulation with Docker
+## Docker Image for Dynamic Simulations
 
-As the proyect was executen on Windows, we avoided Linux virtualizations and simulations are faster on Linux. We used Docker to run simulations and we used the following code to run it:
+The proyect was executed on Windows to avoid Linux virtualizations. However, we noticed that these simulation run faster on Linux systems. We used Docker to run simulations and we used the following code to run it:
 
 ```
 docker build -t dynamic_simulations .
