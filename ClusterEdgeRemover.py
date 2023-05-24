@@ -91,7 +91,7 @@ class ClusterEdgeRemover():
             else:
                 smlm_dataframe = smlm_dataframe[smlm_dataframe['clusterized'] == 1]
 
-        smlm_dataframe = smlm_dataframe.drop([CLUSTERIZED_COLUMN_NAME, CLUSTERIZED_COLUMN_NAME+'_predicted', "Unnamed: 0"], axis=1, errors="ignore")
+        smlm_dataframe = smlm_dataframe.drop(["Unnamed: 0"], axis=1, errors="ignore")
         smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] / np.array([self.width, self.height]))
 
         smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / smlm_dataframe[TIME_COLUMN_NAME].abs().max()
@@ -202,7 +202,6 @@ class ClusterEdgeRemover():
 
         """
         #Connected Components
-        
         cluster_sets = nx.connected_components(G)
         """
 
@@ -235,7 +234,7 @@ class ClusterEdgeRemover():
         if MAGIK_LABEL_COLUMN_NAME in magik_dataset.columns:
             magik_dataset[MAGIK_LABEL_COLUMN_NAME] = magik_dataset[MAGIK_LABEL_COLUMN_NAME].astype(int)
 
-
+        """
         cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
         cluster_indexes_list.remove(0)
         max_index = max(cluster_indexes_list)
@@ -298,6 +297,7 @@ class ClusterEdgeRemover():
             for info in unclusterized_info:
                 if cluster_polygon.contains(Point(*info[1])) and magik_dataset.loc[info[0], MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 0:
                     magik_dataset.loc[info[0], MAGIK_LABEL_COLUMN_NAME_PREDICTED] = cluster_index
+        """
 
         cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
         cluster_indexes_list.remove(0)
