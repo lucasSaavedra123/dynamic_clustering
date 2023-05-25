@@ -39,7 +39,7 @@ dataset.append({'label': 'mAb',
 FRAME_RATE = 10e-3
 
 localization_classifier = LocalizationClassifier(10,10)
-localization_classifier.hyperparameters['partition_size'] = 1000
+localization_classifier.hyperparameters['partition_size'] = 3000
 localization_classifier.load_model()
 
 edge_classifier = ClusterEdgeRemover(10,10)
@@ -53,24 +53,21 @@ for data in dataset:
     smlm_dataset_rows = []
 
     for index, trajectory in enumerate(trajectories):
-        #if not trajectory.is_immobile(1.8):
-        if True:
-            for length_index in range(trajectory.length):
-                smlm_dataset_rows.append({
-                    PARTICLE_ID_COLUMN_NAME: index,
-                    X_POSITION_COLUMN_NAME: trajectory.get_noisy_x()[length_index] / 1000,
-                    Y_POSITION_COLUMN_NAME: trajectory.get_noisy_y()[length_index] / 1000,
-                    TIME_COLUMN_NAME: trajectory.get_time()[length_index],
-                    FRAME_COLUMN_NAME: int(trajectory.get_time()[length_index] / FRAME_RATE),
-                    CLUSTERIZED_COLUMN_NAME: 0,
-                    CLUSTER_ID_COLUMN_NAME: 0,
-                })
+        immobile_trajectory = trajectory.is_immobile(1.8)
+        for length_index in range(trajectory.length):
+            smlm_dataset_rows.append({
+                PARTICLE_ID_COLUMN_NAME: index,
+                X_POSITION_COLUMN_NAME: trajectory.get_noisy_x()[length_index] / 1000,
+                Y_POSITION_COLUMN_NAME: trajectory.get_noisy_y()[length_index] / 1000,
+                TIME_COLUMN_NAME: trajectory.get_time()[length_index],
+                FRAME_COLUMN_NAME: int(trajectory.get_time()[length_index] / FRAME_RATE),
+                CLUSTERIZED_COLUMN_NAME: 0,
+                CLUSTER_ID_COLUMN_NAME: 0,
+                'immobile': immobile_trajectory
+            })
 
     smlm_dataset = pd.DataFrame(smlm_dataset_rows)
-    smlm_dataset = smlm_dataset[smlm_dataset['frame'] < 1000]
     smlm_dataset.to_csv(f"{data['exp_cond']}_{data['label']}.csv", index=False)
-
-    print("Se predice...")
 
     magik_dataset = localization_classifier.transform_smlm_dataset_to_magik_dataframe(smlm_dataset)
     magik_dataset = localization_classifier.predict(magik_dataset)
