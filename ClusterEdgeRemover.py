@@ -236,6 +236,7 @@ class ClusterEdgeRemover():
         if MAGIK_LABEL_COLUMN_NAME in magik_dataset.columns:
             magik_dataset[MAGIK_LABEL_COLUMN_NAME] = magik_dataset[MAGIK_LABEL_COLUMN_NAME].astype(int)
 
+        #From here, there are correction. I need to measure how meaningful are these.
         """
         cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
         cluster_indexes_list.remove(0)
@@ -301,6 +302,7 @@ class ClusterEdgeRemover():
                     magik_dataset.loc[info[0], MAGIK_LABEL_COLUMN_NAME_PREDICTED] = cluster_index
         """
 
+        """
         cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
         cluster_indexes_list.remove(0)
 
@@ -318,6 +320,7 @@ class ClusterEdgeRemover():
 
             magik_dataset = original_dataset
 
+        """
         return magik_dataset
 
     def build_graph(self, full_nodes_dataset, verbose=True, for_predict=False):
@@ -408,7 +411,7 @@ class ClusterEdgeRemover():
             (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
             (nfsolution, efsolution, global_property),
             (nodesets, edgesets, framesets)
-        )            
+        )
 
     @property
     def train_full_graph_file_name(self):
