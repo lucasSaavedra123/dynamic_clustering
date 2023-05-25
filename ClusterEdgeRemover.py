@@ -101,6 +101,8 @@ class ClusterEdgeRemover():
             smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(int)
         smlm_dataframe[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
+        smlm_dataframe = smlm_dataframe.sort_values(TIME_COLUMN_NAME, ascending=True, inplace=False)
+
         return smlm_dataframe.reset_index(drop=True)
 
     def transform_magik_dataframe_to_smlm_dataset(self, magik_dataframe):
