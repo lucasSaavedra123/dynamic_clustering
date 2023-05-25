@@ -41,9 +41,8 @@ if args.min_frame is not None and args.max_frame is not None:
     dataset = dataset[int(args.min_frame) < dataset[FRAME_COLUMN_NAME]]
     dataset = dataset[dataset[FRAME_COLUMN_NAME] < int(args.max_frame)]
 
-
 if MAGIK_LABEL_COLUMN_NAME_PREDICTED in dataset.columns:
-    if not len(sorted(np.unique(dataset[MAGIK_LABEL_COLUMN_NAME].values).tolist())) == [0,1]:
+    if not sorted(np.unique(dataset[MAGIK_LABEL_COLUMN_NAME].values).tolist()) == [0,1]:
         dataset = dataset.rename(columns={
             MAGIK_X_POSITION_COLUMN_NAME: X_POSITION_COLUMN_NAME,
             MAGIK_Y_POSITION_COLUMN_NAME: Y_POSITION_COLUMN_NAME,
