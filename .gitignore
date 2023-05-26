@@ -135,6 +135,7 @@ dmypy.json
 cache
 *.pyx
 ext/
+*.tmp
 
 #Virtual Environment Files
 dynamic_clustering/
