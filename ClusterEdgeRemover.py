@@ -285,6 +285,7 @@ class ClusterEdgeRemover():
             #labels = MeanShift(n_jobs=-1).fit_predict(points[:,0:2]) #With Mean Shift
             magik_dataset.loc[points_index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = labels + offset + max_index
             offset += max(labels) + 1
+        """
 
         cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
         cluster_indexes_list.remove(0)
@@ -300,7 +301,6 @@ class ClusterEdgeRemover():
             for info in unclusterized_info:
                 if cluster_polygon.contains(Point(*info[1])) and magik_dataset.loc[info[0], MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 0:
                     magik_dataset.loc[info[0], MAGIK_LABEL_COLUMN_NAME_PREDICTED] = cluster_index
-        """
 
         """
         cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
@@ -311,6 +311,7 @@ class ClusterEdgeRemover():
 
             if len(set(magik_dataset_by_cluster_index[PARTICLE_ID_COLUMN_NAME].values)) == 1:
                 magik_dataset.loc[magik_dataset_by_cluster_index.index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
+        """
 
         if original_dataset_path is not None:
             original_dataset = self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(original_dataset_path), ignored_non_clustered_localizations=False)
@@ -320,7 +321,6 @@ class ClusterEdgeRemover():
 
             magik_dataset = original_dataset
 
-        """
         return magik_dataset
 
     def build_graph(self, full_nodes_dataset, verbose=True, for_predict=False):
@@ -371,7 +371,7 @@ class ClusterEdgeRemover():
             df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
             df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
 
-            if not for_predict:
+            if MAGIK_LABEL_COLUMN_NAME in full_nodes_dataset.columns:
                 df_window['same_cluster'] = (df_window[MAGIK_LABEL_COLUMN_NAME+"_x"] == df_window[MAGIK_LABEL_COLUMN_NAME+"_y"])
             else:
                 df_window['same_cluster'] = False
