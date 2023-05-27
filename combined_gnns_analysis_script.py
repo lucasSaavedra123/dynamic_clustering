@@ -12,7 +12,7 @@ edge_classifier = ClusterEdgeRemover(10,10)
 edge_classifier.hyperparameters['partition_size'] = 4000
 edge_classifier.load_model()
 
-TEST_DATASETS_PATH = './new_datasets'
+TEST_DATASETS_PATH = './datasets_shuffled/test'
 
 for dataset_file_path in [os.path.join(TEST_DATASETS_PATH, file) for file in os.listdir(TEST_DATASETS_PATH) if file.endswith('_smlm_dataset.csv')]:
     print("Predicting for:", dataset_file_path)
