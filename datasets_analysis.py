@@ -37,13 +37,14 @@ dataset.append({'label': 'mAb',
                 'tracks': mat_data['tracks'][1][2]})
 
 FRAME_RATE = 10e-3
+TEMPORAL_FILE_NAME = 'for_delete.for_delete'
 
 localization_classifier = LocalizationClassifier(10,10)
 localization_classifier.hyperparameters['partition_size'] = 3000
 localization_classifier.load_model()
 
 edge_classifier = ClusterEdgeRemover(10,10)
-edge_classifier.hyperparameters['partition_size'] = 1000
+edge_classifier.hyperparameters['partition_size'] = 4000
 edge_classifier.load_model()
 
 for data in dataset:
@@ -73,8 +74,10 @@ for data in dataset:
     magik_dataset = localization_classifier.predict(magik_dataset)
     smlm_dataset = localization_classifier.transform_magik_dataframe_to_smlm_dataset(magik_dataset)
     
-    #magik_dataset = edge_classifier.transform_smlm_dataset_to_magik_dataframe(smlm_dataset)
-    #magik_dataset = edge_classifier.predict(magik_dataset, detect_clusters=True, apply_threshold=True)
-    #smlm_dataset = edge_classifier.transform_magik_dataframe_to_smlm_dataset(magik_dataset)
+    smlm_dataset.to_csv(TEMPORAL_FILE_NAME)
+
+    magik_dataset = edge_classifier.transform_smlm_dataset_to_magik_dataframe(smlm_dataset)
+    magik_dataset = edge_classifier.predict(magik_dataset, detect_clusters=True, apply_threshold=True, original_dataset_path=TEMPORAL_FILE_NAME)
+    smlm_dataset = edge_classifier.transform_magik_dataframe_to_smlm_dataset(magik_dataset)
 
     smlm_dataset.to_csv(f"{data['exp_cond']}_{data['label']}_prediction.csv", index=False)
