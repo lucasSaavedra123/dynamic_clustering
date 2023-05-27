@@ -1,6 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, f1_score, adjusted_rand_score
 import seaborn as sns
 import numpy as np
 
@@ -83,10 +83,17 @@ if with_clustering:
     else:
         dataset[CLUSTER_ID_COLUMN_NAME] = dataset[column_to_pick].map(generate_colors_for_cluster_ids(max(dataset[column_to_pick])))
 
+if predicted:
+    if binary_clustering and CLUSTERIZED_COLUMN_NAME in dataset.columns:
+        print("F1 Score:", f1_score(dataset[CLUSTERIZED_COLUMN_NAME], dataset[CLUSTERIZED_COLUMN_NAME + '_predicted']))
+
+    if with_clustering and CLUSTER_ID_COLUMN_NAME in dataset.columns:
+        print("ARI:", adjusted_rand_score(dataset[CLUSTER_ID_COLUMN_NAME], dataset[CLUSTER_ID_COLUMN_NAME + '_predicted']))
+
 if filter_flag:
     original_number_of_localizations = len(dataset)
     if predicted:
-        dataset = dataset[dataset[CLUSTERIZED_COLUMN_NAME+ '_predicted'] == 1]
+        dataset = dataset[dataset[CLUSTERIZED_COLUMN_NAME + '_predicted'] == 1]
     else:
         dataset = dataset[dataset[CLUSTERIZED_COLUMN_NAME] == 1]
     new_number_of_localizations = len(dataset)
@@ -124,7 +131,7 @@ if projection == '2d' or args.save_plots:
     ax.set_ylabel('y[um]')
 
     if args.save_plots:
-        plt.savefig(f"{args.filename}_2d.jpg")
+        plt.savefig(f"{args.filename}_2d.jpg", dpi=300)
     else:
         plt.show()
 
@@ -148,6 +155,6 @@ if show_confusion_matrix:
     plt.xlabel("Predicted label", fontsize=15)
 
     if args.save_plots:
-        plt.savefig(f"{args.filename}_confusion_matrix.jpg")
+        plt.savefig(f"{args.filename}_confusion_matrix.jpg", dpi=300)
     else:
         plt.show()
