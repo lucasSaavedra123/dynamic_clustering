@@ -83,6 +83,7 @@ class ClusterEdgeRemover():
             CLUSTER_ID_COLUMN_NAME+"_predicted": MAGIK_LABEL_COLUMN_NAME_PREDICTED,
         })
 
+        smlm_dataframe = smlm_dataframe.sort_values(TIME_COLUMN_NAME, ascending=True, inplace=False).reset_index(drop=True)
         smlm_dataframe['original_index_for_recovery'] = smlm_dataframe.index
 
         if ignored_non_clustered_localizations:
@@ -100,8 +101,6 @@ class ClusterEdgeRemover():
         if MAGIK_LABEL_COLUMN_NAME in smlm_dataframe.columns:
             smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(int)
         smlm_dataframe[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
-
-        smlm_dataframe = smlm_dataframe.sort_values(TIME_COLUMN_NAME, ascending=True, inplace=False)
 
         return smlm_dataframe.reset_index(drop=True)
 
@@ -302,7 +301,6 @@ class ClusterEdgeRemover():
                 if cluster_polygon.contains(Point(*info[1])) and magik_dataset.loc[info[0], MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 0:
                     magik_dataset.loc[info[0], MAGIK_LABEL_COLUMN_NAME_PREDICTED] = cluster_index
 
-        """
         cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
         cluster_indexes_list.remove(0)
 
@@ -311,7 +309,6 @@ class ClusterEdgeRemover():
 
             if len(set(magik_dataset_by_cluster_index[PARTICLE_ID_COLUMN_NAME].values)) == 1:
                 magik_dataset.loc[magik_dataset_by_cluster_index.index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
-        """
 
         if original_dataset_path is not None:
             original_dataset = self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(original_dataset_path), ignored_non_clustered_localizations=False)
