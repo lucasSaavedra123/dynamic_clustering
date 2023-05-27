@@ -66,6 +66,13 @@ binary_clustering = args.binary_clustering
 predicted = args.predicted
 show_confusion_matrix = args.show_confusion_matrix
 
+if predicted:
+    if binary_clustering and CLUSTERIZED_COLUMN_NAME in dataset.columns:
+        print("F1 Score:", f1_score(dataset[CLUSTERIZED_COLUMN_NAME], dataset[CLUSTERIZED_COLUMN_NAME + '_predicted']))
+
+    if with_clustering and CLUSTER_ID_COLUMN_NAME in dataset.columns:
+        print("ARI:", adjusted_rand_score(dataset[CLUSTER_ID_COLUMN_NAME], dataset[CLUSTER_ID_COLUMN_NAME + '_predicted']))
+
 if with_clustering:
     if predicted and binary_clustering:
         column_to_pick = CLUSTERIZED_COLUMN_NAME + '_predicted'
@@ -82,13 +89,6 @@ if with_clustering:
         dataset[CLUSTER_ID_COLUMN_NAME] = dataset[column_to_pick].map(generate_colors_for_cluster_ids(max(dataset[column_to_pick])))
     else:
         dataset[CLUSTER_ID_COLUMN_NAME] = dataset[column_to_pick].map(generate_colors_for_cluster_ids(max(dataset[column_to_pick])))
-
-if predicted:
-    if binary_clustering and CLUSTERIZED_COLUMN_NAME in dataset.columns:
-        print("F1 Score:", f1_score(dataset[CLUSTERIZED_COLUMN_NAME], dataset[CLUSTERIZED_COLUMN_NAME + '_predicted']))
-
-    if with_clustering and CLUSTER_ID_COLUMN_NAME in dataset.columns:
-        print("ARI:", adjusted_rand_score(dataset[CLUSTER_ID_COLUMN_NAME], dataset[CLUSTER_ID_COLUMN_NAME + '_predicted']))
 
 if filter_flag:
     original_number_of_localizations = len(dataset)
