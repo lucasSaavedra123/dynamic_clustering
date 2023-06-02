@@ -4,6 +4,7 @@ import pickle
 import json
 
 from sklearn.metrics import confusion_matrix
+from sklearn.neighbors import NearestNeighbors
 import matplotlib.pyplot as plt
 import seaborn as sns
 import deeptrack as dt
@@ -159,7 +160,28 @@ class LocalizationClassifier():
                 predictions[initial_index:final_index] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...] if apply_threshold else (self.magik_architecture(v).numpy())[0, ...]
 
         magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = predictions
-        magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int) if apply_threshold else magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(float)
+
+        if apply_threshold:
+            magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int)
+
+            columns_to_pick = [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
+            retry = True
+
+            while retry:
+                nbrs = NearestNeighbors(n_neighbors=2, n_jobs=-1).fit(magik_dataset[columns_to_pick].values)
+
+                localizations_classifier_as_positive = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 1]
+                _, indices = nbrs.kneighbors(localizations_classifier_as_positive[columns_to_pick].values)
+
+                left_index = magik_dataset.iloc[indices[:,0]].index
+                right_index = magik_dataset.iloc[indices[:,1]].index
+
+                magik_dataset.loc[left_index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset.loc[right_index, MAGIK_LABEL_COLUMN_NAME_PREDICTED].values
+
+                new_localizations_classifier_as_positive = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 1]
+                retry = not new_localizations_classifier_as_positive.equals(localizations_classifier_as_positive)
+        else:
+            magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(float)
 
         return magik_dataset
 
