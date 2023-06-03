@@ -38,7 +38,12 @@ The proyect was executed on Windows to avoid Linux virtualizations. However, we 
 
 ```
 docker build -t dynamic_simulations .
-docker run -i -v dynamic_simulation_files:/usr/src/app/datasets -t dynamic_simulations bash
+docker run -i -v dynamic_simulation_files:/usr/src/app/datasets --name simulation_container -t dynamic_simulations bash
 ```
 
 Once the shell is open, follow the instructions of the first part.
+
+Then, to retrieve .csv files, run the following command:
+```
+docker cp simulation_container:/usr/src/app/datasets/* ./
+```
