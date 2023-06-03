@@ -45,5 +45,5 @@ Once the shell is open, follow the instructions of the first part.
 
 Then, to retrieve .csv files, run the following command:
 ```
-docker cp simulation_container:/usr/src/app/datasets/* ./
+docker cp simulation_container:/usr/src/app/datasets/ ./
 ```
