@@ -29,7 +29,7 @@ else:
     number = total_txt_files
 
 while True:
-    average_localizations_per_frame = np.random.uniform(10, 50)
+    average_localizations_per_frame = np.random.uniform(10, 100)
 
     an_experiment = Experiment(
         10, #um
