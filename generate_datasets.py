@@ -34,7 +34,7 @@ def next_dataset_number_generator():
 file_number_generator = next_dataset_number_generator()
 
 for file_number in file_number_generator:
-    average_localizations_per_frame = np.random.uniform(10, 50)
+    average_localizations_per_frame = np.random.uniform(10, 100)
 
     an_experiment = Experiment(
         10, #um
