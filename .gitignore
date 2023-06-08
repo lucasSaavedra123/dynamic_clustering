@@ -136,6 +136,7 @@ cache
 *.pyx
 ext/
 *.tmp
+data/
 
 #Virtual Environment Files
 dynamic_clustering/
