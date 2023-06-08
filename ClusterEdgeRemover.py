@@ -35,7 +35,7 @@ class ClusterEdgeRemover():
     @classmethod
     def analysis_hyperparameters(cls):
         return {
-            "partition_size": [500,1000,2000,3000,4000]
+            "partition_size": [500,1000,1500,2000,2500,3000,3500,4000]
         }
 
     def __init__(self, height=10, width=10):

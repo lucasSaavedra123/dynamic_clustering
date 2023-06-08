@@ -33,7 +33,7 @@ class LocalizationClassifier():
     @classmethod
     def analysis_hyperparameters(cls):
         return {
-            "partition_size": [500,1000,2000,3000,4000]
+            "partition_size": [500,1000,1500,2000,2500,3000,3500,4000]
         }
 
     def __init__(self, height=10, width=10):
@@ -171,15 +171,19 @@ class LocalizationClassifier():
                 nbrs = NearestNeighbors(n_neighbors=2, n_jobs=-1).fit(magik_dataset[columns_to_pick].values)
 
                 localizations_classifier_as_positive = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 1]
-                _, indices = nbrs.kneighbors(localizations_classifier_as_positive[columns_to_pick].values)
 
-                left_index = magik_dataset.iloc[indices[:,0]].index
-                right_index = magik_dataset.iloc[indices[:,1]].index
+                if len(localizations_classifier_as_positive) != 0:
+                    _, indices = nbrs.kneighbors(localizations_classifier_as_positive[columns_to_pick].values)
 
-                magik_dataset.loc[left_index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset.loc[right_index, MAGIK_LABEL_COLUMN_NAME_PREDICTED].values
+                    left_index = magik_dataset.iloc[indices[:,0]].index
+                    right_index = magik_dataset.iloc[indices[:,1]].index
 
-                new_localizations_classifier_as_positive = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 1]
-                retry = not new_localizations_classifier_as_positive.equals(localizations_classifier_as_positive)
+                    magik_dataset.loc[left_index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset.loc[right_index, MAGIK_LABEL_COLUMN_NAME_PREDICTED].values
+
+                    new_localizations_classifier_as_positive = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 1]
+                    retry = not new_localizations_classifier_as_positive.equals(localizations_classifier_as_positive)
+                else:
+                    retry = False
         else:
             magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(float)
 
