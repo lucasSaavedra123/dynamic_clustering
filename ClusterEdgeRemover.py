@@ -27,7 +27,7 @@ class ClusterEdgeRemover():
     def default_hyperparameters(cls):
         return {
             "partition_size": 10000,
-            "epochs": 25,
+            "epochs": 10,
             "batch_size": 1,
             "training_set_in_epoch_size": 512
         }
@@ -466,7 +466,7 @@ class ClusterEdgeRemover():
         if not detect_clusters:
             return true, pred
 
-    def fit_with_datasets_from_path(self, path):
+    def fit_with_datasets_from_path(self, path, save_checkpoints=False):
         if os.path.exists(self.train_full_graph_file_name):
             fileObj = open(self.train_full_graph_file_name, 'rb')
             train_full_graph = pickle.load(fileObj)
@@ -521,6 +521,9 @@ class ClusterEdgeRemover():
 
             self.save_history_training_info()
 
+            if save_checkpoints:
+                self.save_keras_model()
+
             del generator
         
         del train_full_graph
@@ -545,6 +548,9 @@ class ClusterEdgeRemover():
 
             if positive_is_majority:
                 self.threshold = 1 - self.threshold
+
+            if save_checkpoints:
+                self.save_threshold()
 
     def plot_confusion_matrix(self, ground_truth, Y_predicted, normalized=True):
         confusion_mat = confusion_matrix(y_true=ground_truth, y_pred=Y_predicted)
