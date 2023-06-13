@@ -34,8 +34,9 @@ def filter_dataset_from_arguments(args, dataset):
     }
 
     for dict_key in dict_of_ranges:
-        dataset = dataset[int(dict_of_ranges[dict_key][0]) < dataset[dict_key]]
-        dataset = dataset[dataset[dict_key] < int(dict_of_ranges[dict_key][1])]
+        if dict_of_ranges[dict_key] != []:
+            dataset = dataset[dict_of_ranges[dict_key][0] < dataset[dict_key]]
+            dataset = dataset[dataset[dict_key] < dict_of_ranges[dict_key][1]]
 
     return dataset
 
@@ -52,19 +53,19 @@ def generate_colors_for_cluster_ids(max_cluster_id):
 
 parser = ArgumentParser()
 parser.add_argument("-f", "--file", dest="filename")
-parser.add_argument("-d", "--dimension", default='3d', dest="dimension")
+parser.add_argument("-p", "--projection", default='3d', dest="projection")
 parser.add_argument("-c", "--with-clustering", default=False, dest="with_clustering", action=BooleanOptionalAction)
 parser.add_argument("-s", "--save_plots", default=False, dest="save_plots", action=BooleanOptionalAction)
-parser.add_argument("-r", "--filter", default=False, dest="filter", action=BooleanOptionalAction)
+parser.add_argument("-r", "--filter_flag", default=False, dest="filter_flag", action=BooleanOptionalAction)
 parser.add_argument("-b", "--binary_clustering", default=False, dest="binary_clustering", action=BooleanOptionalAction)
-parser.add_argument("-p", "--predicted", default=False, dest="predicted", action=BooleanOptionalAction)
+parser.add_argument("-i", "--predicted", default=False, dest="predicted", action=BooleanOptionalAction)
 parser.add_argument("-a", "--show_performance", default=False, dest="show_performance", action=BooleanOptionalAction)
 parser.add_argument("-m", "--from_magic", default=False, dest="from_magic", action=BooleanOptionalAction)
 
 #Range Arguments
 parser.add_argument('-fr', '--frame_range', type=int, nargs='+', default=[])
-parser.add_argument('-rx', '--roi_x', type=int, nargs='+', default=[])
-parser.add_argument('-ry', '--roi_y', type=int, nargs='+', default=[])
+parser.add_argument('-rx', '--roi_x', type=float, nargs='+', default=[])
+parser.add_argument('-ry', '--roi_y', type=float, nargs='+', default=[])
 
 args = parser.parse_args()
 
@@ -91,6 +92,7 @@ if args.from_magic:
             })
 
 dataset = filter_dataset_from_arguments(args, dataset)
+print(dataset)
 
 print(f"Average: {len(dataset)/max(dataset[FRAME_COLUMN_NAME])}")
 
@@ -107,7 +109,7 @@ if args.with_clustering:
         column_to_pick = CLUSTER_ID_COLUMN_NAME + '_predicted'
     elif (not args.predicted) and args.binary_clustering:
         column_to_pick = CLUSTERIZED_COLUMN_NAME
-    elif (not args.__class__predicted) and (not args.binary_clustering):
+    elif (not args.predicted) and (not args.binary_clustering):
         column_to_pick = CLUSTER_ID_COLUMN_NAME
     else:
         raise Exception("Invalid combination of parameters")
