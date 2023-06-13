@@ -26,8 +26,9 @@ class ClusterEdgeRemover():
     @classmethod
     def default_hyperparameters(cls):
         return {
-            "partition_size": 10000,
+            "partition_size": 4000,
             "epochs": 10,
+            "number_of_frames_used_in_simulations": 1000,
             "batch_size": 1,
             "training_set_in_epoch_size": 512
         }
@@ -94,8 +95,7 @@ class ClusterEdgeRemover():
 
         smlm_dataframe = smlm_dataframe.drop(["Unnamed: 0"], axis=1, errors="ignore")
         smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] / np.array([self.width, self.height]))
-
-        smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / smlm_dataframe[TIME_COLUMN_NAME].abs().max()
+        smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / ((self.hyperparameters['number_of_frames_used_in_simulations'] - 1) * FRAME_RATE)
         smlm_dataframe[MAGIK_DATASET_COLUMN_NAME] = set_number
 
         if MAGIK_LABEL_COLUMN_NAME in smlm_dataframe.columns:
