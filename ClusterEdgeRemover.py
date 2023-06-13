@@ -100,6 +100,9 @@ class ClusterEdgeRemover():
 
         if MAGIK_LABEL_COLUMN_NAME in smlm_dataframe.columns:
             smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(int)
+        else:
+            smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = 0
+
         smlm_dataframe[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
         return smlm_dataframe.reset_index(drop=True)
@@ -591,6 +594,7 @@ class ClusterEdgeRemover():
             self.build_network()
             self.magik_architecture.load_weights(self.model_file_name)
         except FileNotFoundError:
+            print(f"WARNING: {self} has not found keras model file (file name:{self.model_file_name})")
             return None
 
         return self.magik_architecture
@@ -600,6 +604,7 @@ class ClusterEdgeRemover():
             with open(self.threshold_file_name, "r") as threshold_file:
                 self.threshold = float(threshold_file.read())
         except FileNotFoundError:
+            print(f"WARNING: {self} has not found keras model file (file name:{self.threshold_file_name})")
             return None
 
         return self.threshold

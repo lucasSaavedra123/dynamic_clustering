@@ -23,10 +23,11 @@ class LocalizationClassifier():
     @classmethod
     def default_hyperparameters(cls):
         return {
-            "partition_size": 3000,
+            "partition_size": 3500,
             "epochs": 100,
             "batch_size": 1,
             "training_set_in_epoch_size": 512,
+            "number_of_frames_used_in_simulations": 1000,
             "ignore_no_clusters_experiments_during_training": True
         }
 
@@ -84,10 +85,16 @@ class LocalizationClassifier():
 
         smlm_dataframe = smlm_dataframe.drop(["Unnamed: 0"], axis=1, errors="ignore")
         smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] / np.array([self.width, self.height]))
-        smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / smlm_dataframe[TIME_COLUMN_NAME].abs().max()
+        smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / (self.hyperparameters['number_of_frames_used_in_simulations'] * FRAME_RATE)
 
         smlm_dataframe[MAGIK_DATASET_COLUMN_NAME] = set_number
-        smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(int)
+        
+        if MAGIK_LABEL_COLUMN_NAME in smlm_dataframe.columns:
+            smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(int)
+        else:
+            smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = 0
+
+        smlm_dataframe[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
         smlm_dataframe = smlm_dataframe.sort_values(TIME_COLUMN_NAME, ascending=True, inplace=False)
 
@@ -441,6 +448,7 @@ class LocalizationClassifier():
             self.build_network()
             self.magik_architecture.load_weights(self.model_file_name)
         except FileNotFoundError:
+            print(f"WARNING: {self} has not found keras model file (file name:{self.model_file_name})")
             return None
 
         return self.magik_architecture
@@ -450,6 +458,7 @@ class LocalizationClassifier():
             with open(self.threshold_file_name, "r") as threshold_file:
                 self.threshold = float(threshold_file.read())
         except FileNotFoundError:
+            print(f"WARNING: {self} has not found keras model file (file name:{self.threshold_file_name})")
             return None
 
         return self.threshold
