@@ -18,6 +18,7 @@ from sklearn.cluster import AgglomerativeClustering
 import alphashape
 from shapely.geometry import Point
 
+
 from training_utils import *
 from CONSTANTS import *
 
@@ -118,6 +119,8 @@ class ClusterEdgeRemover():
         magik_dataframe.loc[:, X_POSITION_COLUMN_NAME] = (magik_dataframe.loc[:, X_POSITION_COLUMN_NAME] * np.array([self.width]))
         magik_dataframe.loc[:, Y_POSITION_COLUMN_NAME] = (magik_dataframe.loc[:, Y_POSITION_COLUMN_NAME] * np.array([self.height]))
 
+        magik_dataframe[TIME_COLUMN_NAME] = magik_dataframe[TIME_COLUMN_NAME] * ((self.hyperparameters['number_of_frames_used_in_simulations'] - 1) * FRAME_RATE)
+
         magik_dataframe = magik_dataframe.drop(MAGIK_DATASET_COLUMN_NAME, axis=1)
 
         return magik_dataframe.reset_index(drop=True)
@@ -194,7 +197,7 @@ class ClusterEdgeRemover():
 
         edges_to_remove = np.where(predictions == 0)[0]
         remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
-        
+
         #remaining_edges_weights = np.delete(grapht[0][1], edges_to_remove, axis=0) #Distance Weight
         #remaining_edges_weights = 1 / np.delete(grapht[0][1], edges_to_remove, axis=0) #Inverse Distance Weight
 
@@ -224,8 +227,10 @@ class ClusterEdgeRemover():
         cluster_sets = nx.community.greedy_modularity_communities(G, weight='weight')
         """
 
+
         #Greedy Modularity without Weights
         cluster_sets = nx.community.greedy_modularity_communities(G, weight=None)
+
 
         magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
@@ -289,6 +294,113 @@ class ClusterEdgeRemover():
             offset += max(labels) + 1
         """
 
+        """
+        cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
+        cluster_indexes_list.remove(0)
+
+        for cluster_index in cluster_indexes_list:
+            cluster_dataframe = magik_dataset[magik_dataset['solution_predicted'] == cluster_index].copy()
+            cluster_dataframe['index'] = cluster_dataframe.index
+
+            if len(cluster_dataframe) >= 5:
+                df_window = cluster_dataframe.copy()
+
+                simplices = Delaunay(df_window[['position-x', 'position-y', 't']].values).simplices
+
+                def less_first(a, b):
+                    return [a,b] if a < b else [b,a]
+
+                list_of_edges = []
+
+                for triangle in simplices:
+                    for e1, e2 in [[0,1],[1,2],[2,0]]: # for all edges of triangle
+                        list_of_edges.append(less_first(triangle[e1],triangle[e2])) # always lesser index first
+
+                new_index_to_old_index = {new_index:df_window.iloc[new_index]['index'] for new_index in range(len(df_window.index.values))}
+                list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
+                list_of_edges = np.unique(list_of_edges, axis=0).tolist() # remove duplicates
+                list_of_edges_as_dataframe = pd.DataFrame({'index_x': [edge[0] for edge in list_of_edges], 'index_y': [edge[1] for edge in list_of_edges]})
+
+                simplified_cross = list_of_edges_as_dataframe.merge(df_window.rename(columns={old_column_name: old_column_name+'_x' for old_column_name in df_window.columns}), on='index_x')
+                simplified_cross = simplified_cross.merge(df_window.rename(columns={old_column_name: old_column_name+'_y' for old_column_name in df_window.columns}), on='index_y')
+
+                df_window = simplified_cross.copy()
+                df_window = df_window[df_window['index_x'] != df_window['index_y']]
+                df_window['distance-x'] = df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_y"]
+                df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
+                df_window['distance-t'] = df_window[f"t_x"] - df_window[f"t_y"]
+                df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2) + (df_window['distance-t']**2))**(1/2)
+                df_window = df_window[df_window['distance'] < df_window['distance'].quantile(0.90)]
+
+                G=nx.Graph()
+                G.add_edges_from(df_window[['index_x', 'index_y']].values)
+                cluster_sets = list(nx.connected_components(G))
+
+                cluster_dataframe.loc[:,'solution_predicted'] = 0
+
+                largest_sub_cluster = max(list(cluster_sets), key=len)
+
+                for value in largest_sub_cluster:
+                    cluster_dataframe.loc[value, 'solution_predicted'] = cluster_index
+
+                magik_dataset.loc[cluster_dataframe['index'], 'solution_predicted'] = cluster_dataframe['solution_predicted'].astype(int)
+        """
+
+        """
+        cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
+        cluster_indexes_list.remove(0)
+        index_counter = 1
+
+        for cluster_index in cluster_indexes_list:
+            cluster_dataframe = magik_dataset[magik_dataset['solution_predicted'] == cluster_index].copy()
+            cluster_dataframe['index'] = cluster_dataframe.index
+
+            if len(cluster_dataframe) >= 5:
+                df_window = cluster_dataframe.copy()
+
+                simplices = Delaunay(df_window[['position-x', 'position-y', 't']].values).simplices
+
+                def less_first(a, b):
+                    return [a,b] if a < b else [b,a]
+
+                list_of_edges = []
+
+                for triangle in simplices:
+                    for e1, e2 in [[0,1],[1,2],[2,0]]: # for all edges of triangle
+                        list_of_edges.append(less_first(triangle[e1],triangle[e2])) # always lesser index first
+
+                new_index_to_old_index = {new_index:df_window.iloc[new_index]['index'] for new_index in range(len(df_window.index.values))}
+                list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
+                list_of_edges = np.unique(list_of_edges, axis=0).tolist() # remove duplicates
+                list_of_edges_as_dataframe = pd.DataFrame({'index_x': [edge[0] for edge in list_of_edges], 'index_y': [edge[1] for edge in list_of_edges]})
+
+                simplified_cross = list_of_edges_as_dataframe.merge(df_window.rename(columns={old_column_name: old_column_name+'_x' for old_column_name in df_window.columns}), on='index_x')
+                simplified_cross = simplified_cross.merge(df_window.rename(columns={old_column_name: old_column_name+'_y' for old_column_name in df_window.columns}), on='index_y')
+
+                df_window = simplified_cross.copy()
+                df_window = df_window[df_window['index_x'] != df_window['index_y']]
+                df_window['distance-x'] = df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_y"]
+                df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
+                df_window['distance-t'] = df_window[f"t_x"] - df_window[f"t_y"]
+                df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
+                df_window = df_window[df_window['distance'] < df_window['distance'].quantile(0.75)]
+
+                G=nx.Graph()
+                G.add_edges_from(df_window[['index_x', 'index_y']].values)
+                cluster_sets = list(nx.connected_components(G))
+
+                cluster_dataframe.loc[:,'solution_predicted'] = 0
+
+                for index, a_set in enumerate(cluster_sets):
+                    for value in a_set:
+                        cluster_dataframe.loc[value, 'solution_predicted'] = index_counter
+                    index_counter += 1
+
+                magik_dataset.loc[cluster_dataframe['index'], 'solution_predicted'] = cluster_dataframe['solution_predicted'].astype(int)
+        """
+
+        """
+        #Alpha-Shape Correction
         cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
         cluster_indexes_list.remove(0)
 
@@ -303,7 +415,10 @@ class ClusterEdgeRemover():
             for info in unclusterized_info:
                 if cluster_polygon.contains(Point(*info[1])) and magik_dataset.loc[info[0], MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 0:
                     magik_dataset.loc[info[0], MAGIK_LABEL_COLUMN_NAME_PREDICTED] = cluster_index
+        """
 
+        """
+        #Clusters with one particule dropped
         cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
         cluster_indexes_list.remove(0)
 
@@ -312,7 +427,9 @@ class ClusterEdgeRemover():
 
             if len(set(magik_dataset_by_cluster_index[PARTICLE_ID_COLUMN_NAME].values)) == 1:
                 magik_dataset.loc[magik_dataset_by_cluster_index.index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
+        """
 
+        #Filtered Localization Reinsertion
         if original_dataset_path is not None:
             original_dataset = self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(original_dataset_path), ignored_non_clustered_localizations=False)
 
@@ -320,7 +437,7 @@ class ClusterEdgeRemover():
                 original_dataset.loc[original_dataset["original_index_for_recovery"] == row["original_index_for_recovery"], MAGIK_LABEL_COLUMN_NAME_PREDICTED] = row[MAGIK_LABEL_COLUMN_NAME_PREDICTED]
 
             magik_dataset = original_dataset
-
+        
         return magik_dataset
 
     def build_graph(self, full_nodes_dataset, verbose=True, for_predict=False):
@@ -376,15 +493,14 @@ class ClusterEdgeRemover():
             else:
                 df_window['same_cluster'] = False
 
-            if for_predict or not df_window['same_cluster'].all():
-                edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
-                
-                new_edges_dataframe = pd.concat([new_edges_dataframe, pd.DataFrame({
-                    'index_1': [edge[0] for edge in edges],
-                    'index_2': [edge[1] for edge in edges],
-                    'distance': [value[0] for value in df_window[["distance"]].values.tolist()],
-                    'same_cluster': [value[0] for value in df_window[["same_cluster"]].values.tolist()],
-                })], ignore_index=True)
+            edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
+
+            new_edges_dataframe = pd.concat([new_edges_dataframe, pd.DataFrame({
+                'index_1': [edge[0] for edge in edges],
+                'index_2': [edge[1] for edge in edges],
+                'distance': [value[0] for value in df_window[["distance"]].values.tolist()],
+                'same_cluster': [value[0] for value in df_window[["same_cluster"]].values.tolist()],
+            })], ignore_index=True)
 
             new_edges_dataframe = new_edges_dataframe.drop_duplicates()
             new_edges_dataframe['set'] = setid
