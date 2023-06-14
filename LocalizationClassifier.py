@@ -102,6 +102,7 @@ class LocalizationClassifier():
 
     def transform_magik_dataframe_to_smlm_dataset(self, magik_dataframe):
         magik_dataframe.loc[:, magik_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] * np.array([self.width, self.height]))
+        magik_dataframe[TIME_COLUMN_NAME] = magik_dataframe[TIME_COLUMN_NAME] * ((self.hyperparameters['number_of_frames_used_in_simulations'] - 1) * FRAME_RATE)
 
         magik_dataframe = magik_dataframe.rename(columns={
             MAGIK_X_POSITION_COLUMN_NAME: X_POSITION_COLUMN_NAME,
