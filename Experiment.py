@@ -10,20 +10,10 @@ from scipy.stats import skewnorm
 from Cluster import Cluster
 from Particle import Particle
 from CONSTANTS import *
-from utils import custom_norm
+from utils import custom_norm, custom_mean
 
 
-def custom_mean(vector):
-
-  number_of_elements = 0
-  sum = 0
-
-  for i in vector:
-    sum += i
-    number_of_elements += 1
-
-  return sum/number_of_elements
-
+"""
 def generate_skewed_normal_distribution(mean, std, skewness, min_value, max_value):
   r = skewnorm.rvs(skewness, loc=mean, scale=std, size=1)[0]
 
@@ -31,6 +21,7 @@ def generate_skewed_normal_distribution(mean, std, skewness, min_value, max_valu
     r = skewnorm.rvs(skewness, loc=mean, scale=std, size=1)[0]
 
   return int(r)
+"""
 
 class Experiment():
   def __init__(self,
@@ -158,7 +149,8 @@ class Experiment():
     )
 
   def generate_cluster_for_experiment(self):
-    lifetime = generate_skewed_normal_distribution(self.lifetime_mean, self.lifetime_std, self.lifetime_skewness, self.lifetime_range[0], self.lifetime_range[1])
+    #lifetime = generate_skewed_normal_distribution(self.lifetime_mean, self.lifetime_std, self.lifetime_skewness, self.lifetime_range[0], self.lifetime_range[1])
+    lifetime = np.random.uniform(self.lifetime_range[0], self.lifetime_range[1])
 
     return Cluster(
           np.random.uniform(self.radio_range[0], self.radio_range[1]),
@@ -365,7 +357,8 @@ class Experiment():
         0,
         np.random.uniform(self.cluster_centroids_diffusion_coefficient_range[0], self.cluster_centroids_diffusion_coefficient_range[1]),
         np.random.choice(self.retention_probabilities_functions_for_each_cluster, 1)[0],
-        generate_skewed_normal_distribution(self.lifetime_mean, self.lifetime_std, self.lifetime_skewness, self.lifetime_range[0], self.lifetime_range[1]),
+        #generate_skewed_normal_distribution(self.lifetime_mean, self.lifetime_std, self.lifetime_skewness, self.lifetime_range[0], self.lifetime_range[1]),
+        np.random.uniform(self.lifetime_range[0], self.lifetime_range[1]),
         self.eccentricity_maximum,
         self,
         initial_particles=[]
@@ -450,7 +443,8 @@ class Experiment():
             0,
             np.random.uniform(self.cluster_centroids_diffusion_coefficient_range[0], self.cluster_centroids_diffusion_coefficient_range[1]),
             np.random.choice(self.retention_probabilities_functions_for_each_cluster, 1)[0],
-            generate_skewed_normal_distribution(self.lifetime_mean, self.lifetime_std, self.lifetime_skewness, self.lifetime_range[0], self.lifetime_range[1]),
+            #generate_skewed_normal_distribution(self.lifetime_mean, self.lifetime_std, self.lifetime_skewness, self.lifetime_range[0], self.lifetime_range[1]),
+            np.random.uniform(self.lifetime_range[0], self.lifetime_range[1]),
             self.eccentricity_maximum,
             self,
             initial_particles=[]

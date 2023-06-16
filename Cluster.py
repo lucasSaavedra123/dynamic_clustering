@@ -2,7 +2,7 @@ import itertools
 
 import numpy as np
 
-from hypo import Hypoexponential
+#from hypo import Hypoexponential
 from Particle import Particle
 
 from utils import custom_norm
@@ -79,7 +79,8 @@ class Cluster():
     factor = np.random.uniform(self.min_factor, self.max_factor)
     particle.diffusion_coefficient = self.centroid_diffusion_coefficient/factor
     particle.can_be_retained = np.random.choice([False, True], 1, p=[0.90, 0.10])[0]
-    particle.residence_time = Hypoexponential(self.experiment.residence_time_range).sample(1)[0]
+    #particle.residence_time = Hypoexponential(self.experiment.residence_time_range).sample(1)[0]
+    particle.residence_time = np.random.uniform(self.experiment.residence_time_range[0], self.experiment.residence_time_range[1])
     particle.going_out_from_cluster = False
     particle.time_belonging_cluster = self.experiment.current_time
 
@@ -140,7 +141,8 @@ class Cluster():
       self.experiment,
       can_be_retained=np.random.choice([False, True], 1, p=[0.95, 0.05]),
       cluster=self,
-      residence_time=Hypoexponential(self.experiment.residence_time_range).sample(1)[0]
+      #residence_time=Hypoexponential(self.experiment.residence_time_range).sample(1)[0]
+      residence_time = np.random.uniform(self.experiment.residence_time_range[0], self.experiment.residence_time_range[1])
     )
 
   def probability_to_be_retained(self, particle):
