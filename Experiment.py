@@ -475,6 +475,11 @@ class Experiment():
 
     string_text += f"percentage_of_clustered_molecules: {self.percentage_of_clustered_molecules}\n"
 
+    string_text += f"Cluster Info:\n"
+
+    for cluster_index, cluster in enumerate(self.clusters):
+      string_text += f"{cluster_index}:\n{cluster.summary_as_string}\n"
+
     return string_text
 
   def summary(self):

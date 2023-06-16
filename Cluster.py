@@ -216,3 +216,14 @@ class Cluster():
     particle_of_self = len(self.particles)
 
     return self_particles_that_are_in_another_cluster/particle_of_self == 1
+
+  @property
+  def summary_as_string(self):
+    string_text = ""
+    for attribute in self.__dict__:
+      if attribute in ['particles']:
+        string_text += f"{attribute}: {len(self.__dict__[attribute])}\n"
+      elif attribute in ['radio', 'lifetime', 'centroid_diffusion_coefficient', 'eccentricity_maximum']:
+        string_text += f"{attribute}: {self.__dict__[attribute]}\n"    
+
+    return string_text
