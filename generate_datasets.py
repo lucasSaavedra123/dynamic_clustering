@@ -46,7 +46,7 @@ while True:
         [RetentionProbabilityWithDiscreteFunction, RetentionProbabilityWithCuadraticFunction, RetentionProbabilityWithLinearFunction],
         [0.01, 0.5],
         [2, 5],
-        [25, 7000],
+        [25, 1000],
         3,
         500,
         2000,
