@@ -1,83 +1,21 @@
-from scipy.io import loadmat
+import os
 import pandas as pd
+from utils import predict_on_dataset
 
-from data.Trajectory import Trajectory
 from LocalizationClassifier import LocalizationClassifier
 from ClusterEdgeRemover import ClusterEdgeRemover
 
-X_POSITION_COLUMN_NAME='x'
-Y_POSITION_COLUMN_NAME='y'
-TIME_COLUMN_NAME='t'
-FRAME_COLUMN_NAME='frame'
-CLUSTER_ID_COLUMN_NAME='cluster_id'
-CLUSTERIZED_COLUMN_NAME='clusterized'
-PARTICLE_ID_COLUMN_NAME='particle_id'
-
-mat_data = loadmat('./data/all_tracks_thunder_localizer.mat')
-# Orden en la struct [BTX|mAb] [CDx|Control|CDx-Chol]
-dataset = []
-# Add each label and condition to the dataset
-dataset.append({'label': 'BTX',
-                'exp_cond': 'CDx',
-                'tracks': mat_data['tracks'][0][0]})
-dataset.append({'label': 'BTX',
-                'exp_cond': 'Control',
-                'tracks': mat_data['tracks'][0][1]})
-dataset.append({'label': 'BTX',
-                'exp_cond': 'CDx-Chol',
-                'tracks': mat_data['tracks'][0][2]})
-dataset.append({'label': 'mAb',
-                'exp_cond': 'CDx',
-                'tracks': mat_data['tracks'][1][0]})
-dataset.append({'label': 'mAb',
-                'exp_cond': 'Control',
-                'tracks': mat_data['tracks'][1][1]})
-dataset.append({'label': 'mAb',
-                'exp_cond': 'CDx-Chol',
-                'tracks': mat_data['tracks'][1][2]})
-
-FRAME_RATE = 10e-3
-TEMPORAL_FILE_NAME = 'for_delete.for_delete'
-
 localization_classifier = LocalizationClassifier(10,10)
-localization_classifier.hyperparameters['partition_size'] = 3000
 localization_classifier.load_model()
 
 edge_classifier = ClusterEdgeRemover(10,10)
-edge_classifier.hyperparameters['partition_size'] = 4000
 edge_classifier.load_model()
 
-for data in dataset:
-    print("Building dataset for:", data['label'], data['exp_cond'])
-    trajectories = Trajectory.from_mat_dataset(data['tracks'], data['label'], data['exp_cond'])
+#TEST_DATASETS_PATH = "D:/UCA/03-Clustering Dynamics/Biological Dataset Preparation"
+TEST_DATASETS_PATH = "./datasets_shuffled/test"
 
-    smlm_dataset_rows = []
-
-    for index, trajectory in enumerate(trajectories):
-        immobile_trajectory = trajectory.is_immobile(1.8)
-        for length_index in range(trajectory.length):
-            smlm_dataset_rows.append({
-                PARTICLE_ID_COLUMN_NAME: index,
-                X_POSITION_COLUMN_NAME: trajectory.get_noisy_x()[length_index] / 1000,
-                Y_POSITION_COLUMN_NAME: trajectory.get_noisy_y()[length_index] / 1000,
-                TIME_COLUMN_NAME: trajectory.get_time()[length_index],
-                FRAME_COLUMN_NAME: int(trajectory.get_time()[length_index] / FRAME_RATE),
-                CLUSTERIZED_COLUMN_NAME: 0,
-                CLUSTER_ID_COLUMN_NAME: 0,
-                'immobile': immobile_trajectory
-            })
-
-    smlm_dataset = pd.DataFrame(smlm_dataset_rows)
-    smlm_dataset.to_csv(f"{data['exp_cond']}_{data['label']}.csv", index=False)
-
-    magik_dataset = localization_classifier.transform_smlm_dataset_to_magik_dataframe(smlm_dataset)
-    magik_dataset = localization_classifier.predict(magik_dataset)
-    smlm_dataset = localization_classifier.transform_magik_dataframe_to_smlm_dataset(magik_dataset)
-    
-    smlm_dataset.to_csv(TEMPORAL_FILE_NAME)
-
-    magik_dataset = edge_classifier.transform_smlm_dataset_to_magik_dataframe(smlm_dataset)
-    magik_dataset = edge_classifier.predict(magik_dataset, detect_clusters=True, apply_threshold=True, original_dataset_path=TEMPORAL_FILE_NAME)
-    smlm_dataset = edge_classifier.transform_magik_dataframe_to_smlm_dataset(magik_dataset)
-
-    smlm_dataset.to_csv(f"{data['exp_cond']}_{data['label']}_prediction.csv", index=False)
+for dataset_file_path in [os.path.join(TEST_DATASETS_PATH, file) for file in os.listdir(TEST_DATASETS_PATH) if file.endswith('_smlm_dataset.csv')]:
+    print("Predicting for:", dataset_file_path)
+    smlm_dataset = pd.read_csv(dataset_file_path)
+    smlm_dataset = predict_on_dataset(smlm_dataset, localization_classifier, edge_classifier)
+    smlm_dataset.to_csv(dataset_file_path+"/../.full_prediction.csv", index=False)
