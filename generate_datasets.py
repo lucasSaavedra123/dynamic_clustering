@@ -36,7 +36,7 @@ while True:
         10, #um
         [0, 100], #number_of_clusters_range
         #[0.02, 0.2], #radio_range
-        [0.01, 0.5], #radio_range
+        [0.01, 0.2], #radio_range
         [10, 100], #number_of_particles_per_cluster_range
         [1e-5, 0.01], #cluster_centroids_diffusion_coefficient_range
         [1e-5, 0.7], #no_cluster_molecules_diffusion_coefficient_range
