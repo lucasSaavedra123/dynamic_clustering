@@ -227,10 +227,8 @@ class ClusterEdgeRemover():
         cluster_sets = nx.community.greedy_modularity_communities(G, weight='weight')
         """
 
-
         #Greedy Modularity without Weights
         cluster_sets = nx.community.greedy_modularity_communities(G, weight=None)
-
 
         magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
@@ -242,6 +240,21 @@ class ClusterEdgeRemover():
 
         if MAGIK_LABEL_COLUMN_NAME in magik_dataset.columns:
             magik_dataset[MAGIK_LABEL_COLUMN_NAME] = magik_dataset[MAGIK_LABEL_COLUMN_NAME].astype(int)
+
+        #Last Correction
+        cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
+
+        if 0 in cluster_indexes_list:
+            cluster_indexes_list.remove(0)
+
+        for cluster_index in cluster_indexes_list:
+            cluster_dataframe = magik_dataset[ magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == cluster_index ]
+
+            if len(cluster_dataframe) >= 4 and cluster_dataframe[TIME_COLUMN_NAME].max() - cluster_dataframe[TIME_COLUMN_NAME].min() != 0:
+                pass
+            else:
+                magik_dataset.loc[cluster_dataframe.index, CLUSTERIZED_COLUMN_NAME+'_predicted'] = 0
+                magik_dataset.loc[cluster_dataframe.index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
         #From here, there are correction. I need to measure how meaningful are these.
         """
@@ -399,6 +412,16 @@ class ClusterEdgeRemover():
                 magik_dataset.loc[cluster_dataframe['index'], 'solution_predicted'] = cluster_dataframe['solution_predicted'].astype(int)
         """
 
+        #Filtered Localization Reinsertion
+        if original_dataset_path is not None:
+            original_dataset = self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(original_dataset_path), ignored_non_clustered_localizations=False)
+
+            for _, row in magik_dataset.iterrows():
+                original_dataset.loc[original_dataset["original_index_for_recovery"] == row["original_index_for_recovery"], MAGIK_LABEL_COLUMN_NAME_PREDICTED] = row[MAGIK_LABEL_COLUMN_NAME_PREDICTED]
+                original_dataset.loc[original_dataset["original_index_for_recovery"] == row["original_index_for_recovery"], CLUSTERIZED_COLUMN_NAME+'_predicted'] = row[CLUSTERIZED_COLUMN_NAME+'_predicted']
+
+            magik_dataset = original_dataset
+
         """
         #Alpha-Shape Correction
         cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
@@ -415,29 +438,9 @@ class ClusterEdgeRemover():
             for info in unclusterized_info:
                 if cluster_polygon.contains(Point(*info[1])) and magik_dataset.loc[info[0], MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 0:
                     magik_dataset.loc[info[0], MAGIK_LABEL_COLUMN_NAME_PREDICTED] = cluster_index
+                    magik_dataset.loc[info[0], CLUSTERIZED_COLUMN_NAME+'_predicted'] = 1
         """
 
-        """
-        #Clusters with one particule dropped
-        cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
-        cluster_indexes_list.remove(0)
-
-        for cluster_index in cluster_indexes_list:
-            magik_dataset_by_cluster_index = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == cluster_index]
-
-            if len(set(magik_dataset_by_cluster_index[PARTICLE_ID_COLUMN_NAME].values)) == 1:
-                magik_dataset.loc[magik_dataset_by_cluster_index.index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
-        """
-
-        #Filtered Localization Reinsertion
-        if original_dataset_path is not None:
-            original_dataset = self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(original_dataset_path), ignored_non_clustered_localizations=False)
-
-            for _, row in magik_dataset.iterrows():
-                original_dataset.loc[original_dataset["original_index_for_recovery"] == row["original_index_for_recovery"], MAGIK_LABEL_COLUMN_NAME_PREDICTED] = row[MAGIK_LABEL_COLUMN_NAME_PREDICTED]
-
-            magik_dataset = original_dataset
-        
         return magik_dataset
 
     def build_graph(self, full_nodes_dataset, verbose=True, for_predict=False):
