@@ -402,7 +402,7 @@ class LocalizationClassifier():
 
             thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
 
-            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC')
+            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=1, subsets_size=0.2, with_replacement=False)
 
             if positive_is_majority:
                 self.threshold = 1 - self.threshold

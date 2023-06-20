@@ -28,7 +28,7 @@ class ClusterEdgeRemover():
     def default_hyperparameters(cls):
         return {
             "partition_size": 4000,
-            "epochs": 10,
+            "epochs": 25,
             "number_of_frames_used_in_simulations": 1000,
             "batch_size": 1,
             "training_set_in_epoch_size": 512
@@ -56,10 +56,10 @@ class ClusterEdgeRemover():
 
     @property
     def edge_features(self):
-        return ["distance"]
+        return ["distance", "t-difference"]
 
     def build_network(self):
-        self.magik_architecture = dt.models.gnns.MAGIK(
+        self.magik_architecture = dt.models.gnns.CTMAGIK(
             dense_layer_dimensions=(64, 96,),
             base_layer_dimensions=(96, 96, 96),
             number_of_node_features=len(self.node_features),
@@ -77,7 +77,7 @@ class ClusterEdgeRemover():
 
         #self.magik_architecture.summary()
 
-    def transform_smlm_dataset_to_magik_dataframe(self, smlm_dataframe, set_number=0, ignored_non_clustered_localizations=True):
+    def transform_smlm_dataset_to_magik_dataframe(self, smlm_dataframe, set_number=0, ignore_non_clustered_localizations=True):
         smlm_dataframe = smlm_dataframe.rename(columns={
             X_POSITION_COLUMN_NAME: MAGIK_X_POSITION_COLUMN_NAME,
             Y_POSITION_COLUMN_NAME: MAGIK_Y_POSITION_COLUMN_NAME,
@@ -88,7 +88,7 @@ class ClusterEdgeRemover():
         smlm_dataframe = smlm_dataframe.sort_values(TIME_COLUMN_NAME, ascending=True, inplace=False).reset_index(drop=True)
         smlm_dataframe['original_index_for_recovery'] = smlm_dataframe.index
 
-        if ignored_non_clustered_localizations:
+        if ignore_non_clustered_localizations:
             if 'clusterized_predicted' in smlm_dataframe.columns:
                 smlm_dataframe = smlm_dataframe[smlm_dataframe['clusterized_predicted'] == 1]
             else:
@@ -125,13 +125,13 @@ class ClusterEdgeRemover():
 
         return magik_dataframe.reset_index(drop=True)
 
-    def get_dataset_from_path(self, path, set_number=0):
-        return self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(path), set_number=set_number)
+    def get_dataset_from_path(self, path, set_number=0, ignore_non_clustered_localizations=True):
+        return self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(path), set_number=set_number, ignore_non_clustered_localizations=ignore_non_clustered_localizations)
 
     def get_dataset_file_paths_from(self, path):
         return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
 
-    def get_datasets_from_path(self, path):
+    def get_datasets_from_path(self, path, ignore_non_clustered_localizations=True):
         """
         This method is different of the Localization Classifier method
         because there are some datasets for testing that have no clusters
@@ -140,7 +140,7 @@ class ClusterEdgeRemover():
         set_index = 0
 
         for csv_file_path in self.get_dataset_file_paths_from(path):
-            set_dataframe = self.get_dataset_from_path(csv_file_path, set_number=set_index)
+            set_dataframe = self.get_dataset_from_path(csv_file_path, set_number=set_index, ignore_non_clustered_localizations=ignore_non_clustered_localizations)
 
             if not set_dataframe.empty:
                 full_dataset = pd.concat([full_dataset, set_dataframe], ignore_index=True)
@@ -153,7 +153,7 @@ class ClusterEdgeRemover():
 
         magik_dataset = magik_dataset.copy()
 
-        grapht = self.build_graph(magik_dataset, for_predict=True, verbose=False)
+        grapht = self.build_graph(magik_dataset, verbose=False)
 
         predictions = np.empty((len(grapht[0][1]), 1))
 
@@ -227,8 +227,10 @@ class ClusterEdgeRemover():
         cluster_sets = nx.community.greedy_modularity_communities(G, weight='weight')
         """
 
+
         #Greedy Modularity without Weights
         cluster_sets = nx.community.greedy_modularity_communities(G, weight=None)
+
 
         magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
@@ -253,7 +255,6 @@ class ClusterEdgeRemover():
             if len(cluster_dataframe) >= 4 and cluster_dataframe[TIME_COLUMN_NAME].max() - cluster_dataframe[TIME_COLUMN_NAME].min() != 0:
                 pass
             else:
-                magik_dataset.loc[cluster_dataframe.index, CLUSTERIZED_COLUMN_NAME+'_predicted'] = 0
                 magik_dataset.loc[cluster_dataframe.index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
         #From here, there are correction. I need to measure how meaningful are these.
@@ -414,11 +415,10 @@ class ClusterEdgeRemover():
 
         #Filtered Localization Reinsertion
         if original_dataset_path is not None:
-            original_dataset = self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(original_dataset_path), ignored_non_clustered_localizations=False)
+            original_dataset = self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(original_dataset_path), ignore_non_clustered_localizations=False)
 
             for _, row in magik_dataset.iterrows():
                 original_dataset.loc[original_dataset["original_index_for_recovery"] == row["original_index_for_recovery"], MAGIK_LABEL_COLUMN_NAME_PREDICTED] = row[MAGIK_LABEL_COLUMN_NAME_PREDICTED]
-                original_dataset.loc[original_dataset["original_index_for_recovery"] == row["original_index_for_recovery"], CLUSTERIZED_COLUMN_NAME+'_predicted'] = row[CLUSTERIZED_COLUMN_NAME+'_predicted']
 
             magik_dataset = original_dataset
 
@@ -441,9 +441,10 @@ class ClusterEdgeRemover():
                     magik_dataset.loc[info[0], CLUSTERIZED_COLUMN_NAME+'_predicted'] = 1
         """
 
+        magik_dataset[CLUSTERIZED_COLUMN_NAME+'_predicted'] = (magik_dataset[MAGIK_LABEL_COLUMN_NAME] != 0).astype(int)
         return magik_dataset
 
-    def build_graph(self, full_nodes_dataset, verbose=True, for_predict=False):
+    def build_graph(self, full_nodes_dataset, verbose=True):
         edges_dataframe = pd.DataFrame({
             "distance": [],
             "index_1": [],
@@ -489,12 +490,14 @@ class ClusterEdgeRemover():
             df_window = df_window[df_window['index_x'] != df_window['index_y']]
             df_window['distance-x'] = df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_y"]
             df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
+            df_window['t-difference'] = df_window[f"{TIME_COLUMN_NAME}_x"] - df_window[f"{TIME_COLUMN_NAME}_y"]
             df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
 
-            if MAGIK_LABEL_COLUMN_NAME in full_nodes_dataset.columns:
-                df_window['same_cluster'] = (df_window[MAGIK_LABEL_COLUMN_NAME+"_x"] == df_window[MAGIK_LABEL_COLUMN_NAME+"_y"])
-            else:
-                df_window['same_cluster'] = False
+            same_cluster_series_boolean = (df_window[MAGIK_LABEL_COLUMN_NAME+"_x"] == df_window[MAGIK_LABEL_COLUMN_NAME+"_y"])
+            x_index_is_clustered_series_boolean = (df_window[MAGIK_LABEL_COLUMN_NAME+"_x"] != 0)
+            y_index_is_clustered_series_boolean = (df_window[MAGIK_LABEL_COLUMN_NAME+"_y"] != 0)
+            there_are_only_clustered_localization_series_boolean = x_index_is_clustered_series_boolean & y_index_is_clustered_series_boolean
+            df_window['same_cluster'] = (same_cluster_series_boolean & there_are_only_clustered_localization_series_boolean)
 
             edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
 
@@ -502,6 +505,7 @@ class ClusterEdgeRemover():
                 'index_1': [edge[0] for edge in edges],
                 'index_2': [edge[1] for edge in edges],
                 'distance': [value[0] for value in df_window[["distance"]].values.tolist()],
+                't-difference': [abs(value[0]) for value in df_window[["t-difference"]].values.tolist()],
                 'same_cluster': [value[0] for value in df_window[["same_cluster"]].values.tolist()],
             })], ignore_index=True)
 
@@ -666,7 +670,7 @@ class ClusterEdgeRemover():
 
             thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
 
-            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC')
+            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=1, subsets_size=0.2, with_replacement=False)
 
             if positive_is_majority:
                 self.threshold = 1 - self.threshold
