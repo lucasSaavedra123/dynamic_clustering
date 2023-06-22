@@ -37,7 +37,7 @@ class ClusterEdgeRemover():
     @classmethod
     def analysis_hyperparameters(cls):
         return {
-            "partition_size": [4000]
+            "partition_size": [500,1000,1500,2000,2500,3000,3500,4000]
         }
 
     def __init__(self, height=10, width=10):
@@ -551,7 +551,7 @@ class ClusterEdgeRemover():
 
             thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
 
-            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=1, subsets_size=0.05, with_replacement=False)
+            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=1, subsets_size=0.01, with_replacement=False)
 
             if positive_is_majority:
                 self.threshold = 1 - self.threshold
