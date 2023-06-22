@@ -14,10 +14,6 @@ import pandas as pd
 from scipy.spatial import Delaunay
 import networkx as nx
 import ghostml
-from sklearn.cluster import AgglomerativeClustering
-import alphashape
-from shapely.geometry import Point
-from sklearn.neighbors import NearestNeighbors
 
 from training_utils import *
 from CONSTANTS import *
