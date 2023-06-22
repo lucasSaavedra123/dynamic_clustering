@@ -159,6 +159,13 @@ if args.projection == '2d' or args.save_plots:
     ax.set_xlabel('x[um]')
     ax.set_ylabel('y[um]')
 
+    if args.roi_x != []:
+        ax.set_xlim(args.roi_x[0], args.roi_x[1])
+    if args.roi_y != []:
+        ax.set_ylim(args.roi_y[0], args.roi_y[1])
+
+    ax.set_aspect('equal')
+
     if args.save_plots:
         plt.savefig(f"{args.filename}_2d.jpg", dpi=300)
     else:
