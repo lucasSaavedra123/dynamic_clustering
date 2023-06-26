@@ -193,7 +193,7 @@ class ClusterEdgeRemover():
 
         edges_to_remove = np.where(predictions == 0)[0]
         remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
-
+        
         #remaining_edges_weights = np.expand_dims(np.delete(grapht[0][1][:, 0], edges_to_remove, axis=0), -1) #Distance Weight
         #remaining_edges_weights = 1 / remaining_edges_weights #Inverse Distance Weight
 
