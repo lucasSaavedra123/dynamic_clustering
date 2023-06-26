@@ -37,7 +37,6 @@ def predict_on_dataset(smlm_dataset, localization_classifier, edge_classifier):
 
     magik_dataset = edge_classifier.transform_smlm_dataset_to_magik_dataframe(smlm_dataset)
     magik_dataset = edge_classifier.predict(magik_dataset, detect_clusters=True, apply_threshold=True, original_dataset_path=TEMPORAL_FILE_NAME)
-    magik_dataset[CLUSTERIZED_COLUMN_NAME + "_predicted"] =  (magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] != 0).astype(int)
     smlm_dataset = edge_classifier.transform_magik_dataframe_to_smlm_dataset(magik_dataset)
 
     os.remove(TEMPORAL_FILE_NAME)

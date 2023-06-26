@@ -85,10 +85,10 @@ class ClusterEdgeRemover():
         smlm_dataframe['original_index_for_recovery'] = smlm_dataframe.index
 
         if ignore_non_clustered_localizations:
-            if 'clusterized_predicted' in smlm_dataframe.columns:
-                smlm_dataframe = smlm_dataframe[smlm_dataframe['clusterized_predicted'] == 1]
+            if CLUSTERIZED_COLUMN_NAME+"_predicted" in smlm_dataframe.columns:
+                smlm_dataframe = smlm_dataframe[smlm_dataframe[CLUSTERIZED_COLUMN_NAME+"_predicted"] == 1]
             else:
-                smlm_dataframe = smlm_dataframe[smlm_dataframe['clusterized'] == 1]
+                smlm_dataframe = smlm_dataframe[smlm_dataframe[CLUSTERIZED_COLUMN_NAME] == 1]
 
         smlm_dataframe = smlm_dataframe.drop(["Unnamed: 0"], axis=1, errors="ignore")
         smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] / np.array([self.width, self.height]))
@@ -226,7 +226,6 @@ class ClusterEdgeRemover():
         cluster_sets = nx.community.greedy_modularity_communities(G, weight=None)
         """
 
-
         magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
         for index, a_set in enumerate(cluster_sets):
@@ -247,9 +246,7 @@ class ClusterEdgeRemover():
         for cluster_index in cluster_indexes_list:
             cluster_dataframe = magik_dataset[ magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == cluster_index ]
 
-            if len(cluster_dataframe) >= 4 and cluster_dataframe[TIME_COLUMN_NAME].max() - cluster_dataframe[TIME_COLUMN_NAME].min() != 0:
-                pass
-            else:
+            if not (len(cluster_dataframe) >= 5 and cluster_dataframe[TIME_COLUMN_NAME].max() - cluster_dataframe[TIME_COLUMN_NAME].min() > FRAME_RATE):
                 magik_dataset.loc[cluster_dataframe.index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
         #Filtered Localization Reinsertion
@@ -261,7 +258,8 @@ class ClusterEdgeRemover():
 
             magik_dataset = original_dataset
 
-        magik_dataset[CLUSTERIZED_COLUMN_NAME+'_predicted'] = (magik_dataset[MAGIK_LABEL_COLUMN_NAME] != 0).astype(int)
+        magik_dataset[CLUSTERIZED_COLUMN_NAME+'_predicted'] = (magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] != 0).astype(int)
+
         return magik_dataset
 
     def build_graph(self, full_nodes_dataset, verbose=True):
