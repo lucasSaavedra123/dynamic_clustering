@@ -173,7 +173,7 @@ if args.projection == '2d' or args.save_plots:
 
 if args.show_performance:
     confusion_mat = confusion_matrix(y_true=dataset[CLUSTERIZED_COLUMN_NAME].values.tolist(), y_pred=dataset[CLUSTERIZED_COLUMN_NAME+"_predicted"].values.tolist())
-    confusion_mat = confusion_mat.astype('float') / confusion_mat.sum(axis=1)[:, np.newaxis]
+    confusion_mat = np.round(confusion_mat.astype('float') / confusion_mat.sum(axis=1)[:, np.newaxis], 2)
 
     if confusion_mat.shape == (1,1):
         confusion_mat = np.array([[1, 0], [0, 0]])
