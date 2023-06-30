@@ -15,6 +15,8 @@ import tqdm
 import ghostml
 from collections import Counter
 
+from utils import delaunay_from_dataframe
+
 from deeptrack.models.gnns.generators import ContinuousGraphGenerator
 from CONSTANTS import *
 from training_utils import *
@@ -171,7 +173,7 @@ class LocalizationClassifier():
 
         if apply_threshold:
             magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int)
-
+            """
             columns_to_pick = [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
             retry = True
 
@@ -192,6 +194,7 @@ class LocalizationClassifier():
                     retry = not new_localizations_classifier_as_positive.equals(localizations_classifier_as_positive)
                 else:
                     retry = False
+            """
         else:
             magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(float)
 
@@ -215,16 +218,8 @@ class LocalizationClassifier():
 
         for setid in iterator:
             df_window = full_nodes_dataset[full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index()
-            simplices = Delaunay(df_window[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]].values).simplices
-            
-            def less_first(a, b):
-                return [a,b] if a < b else [b,a]
 
-            list_of_edges = []
-
-            for triangle in simplices:
-                for e1, e2 in [[0,1],[1,2],[2,0]]: # for all edges of triangle
-                    list_of_edges.append(less_first(triangle[e1],triangle[e2])) # always lesser index first
+            list_of_edges = delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
 
             new_index_to_old_index = {new_index:df_window.loc[new_index, 'index'] for new_index in df_window.index.values}
             list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)

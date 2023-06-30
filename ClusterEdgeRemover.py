@@ -11,13 +11,11 @@ import deeptrack as dt
 import tensorflow as tf
 import numpy as np
 import pandas as pd
-from scipy.spatial import Delaunay
 import networkx as nx
-import ghostml
 
 from training_utils import *
+from utils import delaunay_from_dataframe
 from CONSTANTS import *
-
 
 class ClusterEdgeRemover():
     @classmethod
@@ -185,21 +183,14 @@ class ClusterEdgeRemover():
         if not detect_clusters:
             return grapht[1][1], predictions
 
-        """
-        As the cluster detection is sensible to the edge pruning (if only one edge is misclassified as positive, two clusters are merged),
-        detected connected components should be segmented to avoid this problem. If two clusters are merged and the performance of the
-        edge classifier is too high, both clusters may be segmentated maximizing the modularity of graph partition. Hint: Levounian
-        """
-
         edges_to_remove = np.where(predictions == 0)[0]
         remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
-        
-        #remaining_edges_weights = np.expand_dims(np.delete(grapht[0][1][:, 0], edges_to_remove, axis=0), -1) #Distance Weight
-        #remaining_edges_weights = 1 / remaining_edges_weights #Inverse Distance Weight
+
+        remaining_edges_weights = np.expand_dims(np.delete(grapht[0][1][:, 0], edges_to_remove, axis=0), -1) #Distance Weight
+        remaining_edges_weights = 1 / remaining_edges_weights #Inverse Distance Weight
 
         G=nx.Graph()
-        G.add_edges_from(remaining_edges_keep) #Unweight Graph
-        #G.add_weighted_edges_from(np.hstack((remaining_edges_keep, remaining_edges_weights)))  #Weighted Graph
+        G.add_weighted_edges_from(np.hstack((remaining_edges_keep, remaining_edges_weights)))  #Weighted Graph
 
         """
         #Connected Components
@@ -288,38 +279,10 @@ class ClusterEdgeRemover():
             
             list_of_edges = []
 
-            columns_to_pick = [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]
-
-            simplices = Delaunay(df_window[columns_to_pick].values).simplices
-
-            def less_first(a, b):
-                return [a,b] if a < b else [b,a]
-
-            for triangle in simplices:
-                for e1, e2 in [[0,1],[1,2],[2,0]]: # for all edges of triangle
-                    list_of_edges.append(less_first(triangle[e1],triangle[e2])) # always lesser index first
-
-            columns_to_pick = [MAGIK_X_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
-
-            simplices = Delaunay(df_window[columns_to_pick].values).simplices
-
-            def less_first(a, b):
-                return [a,b] if a < b else [b,a]
-
-            for triangle in simplices:
-                for e1, e2 in [[0,1],[1,2],[2,0]]: # for all edges of triangle
-                    list_of_edges.append(less_first(triangle[e1],triangle[e2])) # always lesser index first
-
-            columns_to_pick = [MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
-
-            simplices = Delaunay(df_window[columns_to_pick].values).simplices
-
-            def less_first(a, b):
-                return [a,b] if a < b else [b,a]
-
-            for triangle in simplices:
-                for e1, e2 in [[0,1],[1,2],[2,0]]: # for all edges of triangle
-                    list_of_edges.append(less_first(triangle[e1],triangle[e2])) # always lesser index first
+            list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME])
+            list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
+            list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
+            list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
 
             """
             columns_to_pick = [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
@@ -330,25 +293,6 @@ class ClusterEdgeRemover():
             for index in indices:
                 for sub_index in index[1:]:
                     list_of_edges.append([index[0], sub_index])
-            """
-
-            """
-            G = nx.Graph()
-            G.add_edges_from(list_of_edges)
-
-            new_edges = []
-
-            for main_node in G.nodes:
-                for main_node_neighbor in G.neighbors(main_node):
-                    for main_node_neighbor_node in G.neighbors(main_node_neighbor):
-                        for second_node_neighbor_node in G.neighbors(main_node_neighbor_node):
-                            if second_node_neighbor_node != main_node:
-                                new_edges.append(less_first(main_node, second_node_neighbor_node))
-
-                        if main_node_neighbor_node != main_node:
-                            new_edges.append(less_first(main_node, main_node_neighbor_node))
-
-            list_of_edges += new_edges
             """
 
             new_index_to_old_index = {new_index:df_window.loc[new_index, 'index'] for new_index in df_window.index.values}
@@ -430,7 +374,7 @@ class ClusterEdgeRemover():
     def threshold_file_name(self):
         return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.bin"
 
-    def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True, detect_clusters=False, check_if_predictions_file_name_exists=False):
+    def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True, detect_clusters=False, check_if_predictions_file_name_exists=False, ignore_non_clustered_localizations=True):
         assert not (save_predictions and not detect_clusters)
         assert not (save_result and detect_clusters)
 
@@ -444,13 +388,13 @@ class ClusterEdgeRemover():
             iterator = tqdm.tqdm(self.get_dataset_file_paths_from(path)) if verbose else self.get_dataset_file_paths_from(path)
 
             for csv_file_name in iterator:
-                if not self.get_dataset_from_path(csv_file_name).empty:
+                if not self.get_dataset_from_path(csv_file_name, ignore_non_clustered_localizations=ignore_non_clustered_localizations).empty:
                     if detect_clusters:
-                        predictions = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=True, verbose=False, detect_clusters=True, original_dataset_path=csv_file_name)
+                        predictions = self.predict(self.get_dataset_from_path(csv_file_name, ignore_non_clustered_localizations=ignore_non_clustered_localizations), apply_threshold=True, verbose=False, detect_clusters=True, original_dataset_path=csv_file_name)
                         if save_predictions:
                             predictions.to_csv(csv_file_name+f"_predicted_with_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.csv", index=False)
                     else:
-                        result = self.predict(self.get_dataset_from_path(csv_file_name), apply_threshold=apply_threshold, detect_clusters=False, verbose=False)
+                        result = self.predict(self.get_dataset_from_path(csv_file_name, ignore_non_clustered_localizations=ignore_non_clustered_localizations), apply_threshold=apply_threshold, detect_clusters=False, verbose=False)
                         true += result[0][:,0].tolist()
                         pred += result[1][:,0].tolist()
 
@@ -472,7 +416,7 @@ class ClusterEdgeRemover():
             train_full_graph = pickle.load(fileObj)
             fileObj.close()
         else:
-            train_full_graph = self.build_graph(self.get_datasets_from_path(path))
+            train_full_graph = self.build_graph(self.get_datasets_from_path(path, ignore_non_clustered_localizations=False))
             fileObj = open(self.train_full_graph_file_name, 'wb')
             pickle.dump(train_full_graph, fileObj)
             fileObj.close()
@@ -529,12 +473,13 @@ class ClusterEdgeRemover():
         del train_full_graph
 
         if self.load_threshold() is None:
+            """
             print("Running Ghost...")
 
             true = []
             pred = []
 
-            true, pred = self.test_with_datasets_from_path(path, apply_threshold=False, save_result=False, verbose=True)
+            true, pred = self.test_with_datasets_from_path(path, apply_threshold=False, save_result=False, verbose=True, ignore_non_clustered_localizations=False)
 
             count = Counter(true)
             positive_is_majority = count[1] > count[0]
@@ -545,10 +490,10 @@ class ClusterEdgeRemover():
 
             thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
 
-            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=1, subsets_size=0.01, with_replacement=False)
+            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=1, subsets_size=0.000001, with_replacement=False)
+            """
 
-            if positive_is_majority:
-                self.threshold = 1 - self.threshold
+            self.threshold = 0.5
 
             if save_checkpoints:
                 self.save_threshold()
