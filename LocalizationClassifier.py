@@ -322,17 +322,18 @@ class LocalizationClassifier():
         return true, pred
 
     def fit_with_datasets_from_path(self, path, save_checkpoints=False):
-        if os.path.exists(self.train_full_graph_file_name):
-            fileObj = open(self.train_full_graph_file_name, 'rb')
-            train_full_graph = pickle.load(fileObj)
-            fileObj.close()
-        else:
-            train_full_graph = self.build_graph(self.get_datasets_from_path(path))
-            fileObj = open(self.train_full_graph_file_name, 'wb')
-            pickle.dump(train_full_graph, fileObj)
-            fileObj.close()
 
         if self.load_keras_model() is None:
+            if os.path.exists(self.train_full_graph_file_name):
+                fileObj = open(self.train_full_graph_file_name, 'rb')
+                train_full_graph = pickle.load(fileObj)
+                fileObj.close()
+            else:
+                train_full_graph = self.build_graph(self.get_datasets_from_path(path))
+                fileObj = open(self.train_full_graph_file_name, 'wb')
+                pickle.dump(train_full_graph, fileObj)
+                fileObj.close()
+
             def CustomGetFeature(full_graph, **kwargs):
                 return (
                     dt.Value(full_graph)
@@ -379,8 +380,7 @@ class LocalizationClassifier():
                 self.save_keras_model()
 
             del generator
-
-        del train_full_graph
+            del train_full_graph
 
         if self.load_threshold() is None:
             true = []

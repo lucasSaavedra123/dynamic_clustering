@@ -125,7 +125,7 @@ class ClusterEdgeRemover():
     def get_dataset_file_paths_from(self, path):
         return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
 
-    def get_datasets_from_path(self, path, ignore_non_clustered_localizations=True):
+    def get_datasets_from_path(self, path, ignore_non_clustered_localizations=True, ignore_non_clustered_experiments=False):
         """
         This method is different of the Localization Classifier method
         because there are some datasets for testing that have no clusters
@@ -137,8 +137,9 @@ class ClusterEdgeRemover():
             set_dataframe = self.get_dataset_from_path(csv_file_path, set_number=set_index, ignore_non_clustered_localizations=ignore_non_clustered_localizations)
 
             if not set_dataframe.empty:
-                full_dataset = pd.concat([full_dataset, set_dataframe], ignore_index=True)
-                set_index += 1
+                if not set_dataframe.empty and (not ignore_non_clustered_experiments or len(set_dataframe[set_dataframe[CLUSTERIZED_COLUMN_NAME] == 1]) != 0):
+                    full_dataset = pd.concat([full_dataset, set_dataframe], ignore_index=True)
+                    set_index += 1
 
         return full_dataset.reset_index(drop=True)
 
@@ -411,17 +412,18 @@ class ClusterEdgeRemover():
             return true, pred
 
     def fit_with_datasets_from_path(self, path, save_checkpoints=False):
-        if os.path.exists(self.train_full_graph_file_name):
-            fileObj = open(self.train_full_graph_file_name, 'rb')
-            train_full_graph = pickle.load(fileObj)
-            fileObj.close()
-        else:
-            train_full_graph = self.build_graph(self.get_datasets_from_path(path, ignore_non_clustered_localizations=False))
-            fileObj = open(self.train_full_graph_file_name, 'wb')
-            pickle.dump(train_full_graph, fileObj)
-            fileObj.close()
 
         if self.load_keras_model() is None:
+            if os.path.exists(self.train_full_graph_file_name):
+                fileObj = open(self.train_full_graph_file_name, 'rb')
+                train_full_graph = pickle.load(fileObj)
+                fileObj.close()
+            else:
+                train_full_graph = self.build_graph(self.get_datasets_from_path(path, ignore_non_clustered_localizations=False, ignore_non_clustered_experiments=True))
+                fileObj = open(self.train_full_graph_file_name, 'wb')
+                pickle.dump(train_full_graph, fileObj)
+                fileObj.close()
+
             def CustomGetFeature(full_graph, **kwargs):
                 return (
                     dt.Value(full_graph)
@@ -469,8 +471,7 @@ class ClusterEdgeRemover():
                 self.save_keras_model()
 
             del generator
-        
-        del train_full_graph
+            del train_full_graph
 
         if self.load_threshold() is None:
             """
