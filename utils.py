@@ -2,6 +2,7 @@ from math import sqrt
 import os
 
 from scipy.spatial import Delaunay
+from sklearn.neighbors import NearestNeighbors
 
 from CONSTANTS import *
 
@@ -40,5 +41,26 @@ def predict_on_dataset(smlm_dataset, localization_classifier, edge_classifier):
     smlm_dataset = edge_classifier.transform_magik_dataframe_to_smlm_dataset(magik_dataset)
 
     os.remove(TEMPORAL_FILE_NAME)
+
+    retry = True
+    columns_to_pick = [X_POSITION_COLUMN_NAME, Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
+
+    while retry:
+      nbrs = NearestNeighbors(n_neighbors=2, n_jobs=-1).fit(smlm_dataset[columns_to_pick].values)
+
+      localizations_classifier_as_negative = smlm_dataset[smlm_dataset[CLUSTERIZED_COLUMN_NAME+'_predicted'] == 0]
+
+      _, indices = nbrs.kneighbors(localizations_classifier_as_negative[columns_to_pick].values)
+
+      left_index = smlm_dataset.iloc[indices[:,0]].index
+      right_index = smlm_dataset.iloc[indices[:,1]].index
+
+      smlm_dataset.loc[left_index, CLUSTER_ID_COLUMN_NAME+'_predicted'] = smlm_dataset.loc[right_index, CLUSTER_ID_COLUMN_NAME+'_predicted'].values
+      smlm_dataset[CLUSTERIZED_COLUMN_NAME+'_predicted'] = (smlm_dataset[CLUSTER_ID_COLUMN_NAME+'_predicted'] != 0).astype(int)
+      #smlm_dataset.loc[left_index, CLUSTERIZED_COLUMN_NAME+'_predicted'] = smlm_dataset.loc[right_index, CLUSTERIZED_COLUMN_NAME+'_predicted'].values
+
+      new_localizations_classifier_as_negative = smlm_dataset[smlm_dataset[CLUSTERIZED_COLUMN_NAME+'_predicted'] == 0]
+      retry = not new_localizations_classifier_as_negative.equals(localizations_classifier_as_negative)
+
 
     return smlm_dataset

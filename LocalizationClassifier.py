@@ -173,28 +173,6 @@ class LocalizationClassifier():
 
         if apply_threshold:
             magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int)
-            """
-            columns_to_pick = [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
-            retry = True
-
-            while retry:
-                nbrs = NearestNeighbors(n_neighbors=2, n_jobs=-1).fit(magik_dataset[columns_to_pick].values)
-
-                localizations_classifier_as_positive = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 1]
-
-                if len(localizations_classifier_as_positive) != 0:
-                    _, indices = nbrs.kneighbors(localizations_classifier_as_positive[columns_to_pick].values)
-
-                    left_index = magik_dataset.iloc[indices[:,0]].index
-                    right_index = magik_dataset.iloc[indices[:,1]].index
-
-                    magik_dataset.loc[left_index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset.loc[right_index, MAGIK_LABEL_COLUMN_NAME_PREDICTED].values
-
-                    new_localizations_classifier_as_positive = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == 1]
-                    retry = not new_localizations_classifier_as_positive.equals(localizations_classifier_as_positive)
-                else:
-                    retry = False
-            """
         else:
             magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(float)
 

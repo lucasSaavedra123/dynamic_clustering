@@ -21,7 +21,7 @@ class ClusterEdgeRemover():
     @classmethod
     def default_hyperparameters(cls):
         return {
-            "partition_size": 4000,
+            "partition_size": 3500,
             "epochs": 10,
             "number_of_frames_used_in_simulations": 1000,
             "batch_size": 1,
@@ -203,15 +203,15 @@ class ClusterEdgeRemover():
         cluster_sets = nx.community.louvain_communities(G, weight='weight')
         """
 
-
+        """
         #Louvain Method without Weights
         cluster_sets = nx.community.louvain_communities(G, weight=None)
-
-
         """
+
+
         #Greedy Modularity with Weights
         cluster_sets = nx.community.greedy_modularity_communities(G, weight='weight')
-        """
+
 
         """
         #Greedy Modularity without Weights
