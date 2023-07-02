@@ -148,7 +148,7 @@ class ClusterEdgeRemover():
 
         magik_dataset = magik_dataset.copy()
 
-        grapht = self.build_graph(magik_dataset, verbose=False)
+        grapht, real_edges_weights = self.build_graph(magik_dataset, verbose=False, return_real_edges_weights=True)
 
         predictions = np.empty((len(grapht[0][1]), 1))
 
@@ -187,7 +187,8 @@ class ClusterEdgeRemover():
         edges_to_remove = np.where(predictions == 0)[0]
         remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
 
-        remaining_edges_weights = np.expand_dims(np.delete(grapht[0][1][:, 0], edges_to_remove, axis=0), -1) #Distance Weight
+        remaining_edges_weights = np.expand_dims(np.delete(grapht[0][1][:, 0], edges_to_remove, axis=0), -1)
+        #remaining_edges_weights = np.expand_dims(np.delete(real_edges_weights, edges_to_remove, axis=0), -1) #Distance Weight
         remaining_edges_weights = 1 / remaining_edges_weights #Inverse Distance Weight
 
         G=nx.Graph()
@@ -198,20 +199,20 @@ class ClusterEdgeRemover():
         cluster_sets = nx.connected_components(G)
         """
 
-        """
+
         #Louvain Method with Weights
         cluster_sets = nx.community.louvain_communities(G, weight='weight')
-        """
+
 
         """
         #Louvain Method without Weights
         cluster_sets = nx.community.louvain_communities(G, weight=None)
         """
 
-
+        """
         #Greedy Modularity with Weights
         cluster_sets = nx.community.greedy_modularity_communities(G, weight='weight')
-
+        """
 
         """
         #Greedy Modularity without Weights
@@ -254,7 +255,7 @@ class ClusterEdgeRemover():
 
         return magik_dataset
 
-    def build_graph(self, full_nodes_dataset, verbose=True):
+    def build_graph(self, full_nodes_dataset, verbose=True, return_real_edges_weights=False):
         edges_dataframe = pd.DataFrame({
             "distance": [],
             "index_1": [],
@@ -311,6 +312,7 @@ class ClusterEdgeRemover():
             df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
             df_window['t-difference'] = df_window[f"{TIME_COLUMN_NAME}_x"] - df_window[f"{TIME_COLUMN_NAME}_y"]
             df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
+            df_window['real_distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2) + (df_window['t-difference']**2))**(1/2)
 
             same_cluster_series_boolean = (df_window[MAGIK_LABEL_COLUMN_NAME+"_x"] == df_window[MAGIK_LABEL_COLUMN_NAME+"_y"])
             x_index_is_clustered_series_boolean = (df_window[MAGIK_LABEL_COLUMN_NAME+"_x"] != 0)
@@ -325,6 +327,7 @@ class ClusterEdgeRemover():
                 'index_2': [edge[1] for edge in edges],
                 'distance': [value[0] for value in df_window[["distance"]].values.tolist()],
                 't-difference': [abs(value[0]) for value in df_window[["t-difference"]].values.tolist()],
+                'real_distance': [value[0] for value in df_window[["real_distance"]].values.tolist()],
                 'same_cluster': [value[0] for value in df_window[["same_cluster"]].values.tolist()],
             })], ignore_index=True)
 
@@ -349,11 +352,16 @@ class ClusterEdgeRemover():
 
         global_property = np.zeros(np.unique(clusters_extracted_from_dbscan[MAGIK_DATASET_COLUMN_NAME]).shape[0])
 
-        return (
-            (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
-            (nfsolution, efsolution, global_property),
-            (nodesets, edgesets, framesets)
-        )
+        grapht = (
+                (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
+                (nfsolution, efsolution, global_property),
+                (nodesets, edgesets, framesets)
+            )
+
+        if return_real_edges_weights:
+            return grapht, edges_dataframe['real_distance'].to_numpy()
+        else:
+            return grapht
 
     @property
     def train_full_graph_file_name(self):
