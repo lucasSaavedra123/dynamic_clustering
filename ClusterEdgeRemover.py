@@ -199,15 +199,15 @@ class ClusterEdgeRemover():
         cluster_sets = nx.connected_components(G)
         """
 
-
+        """
         #Louvain Method with Weights
         cluster_sets = nx.community.louvain_communities(G, weight='weight')
-
-
         """
+
+
         #Louvain Method without Weights
         cluster_sets = nx.community.louvain_communities(G, weight=None)
-        """
+
 
         """
         #Greedy Modularity with Weights
