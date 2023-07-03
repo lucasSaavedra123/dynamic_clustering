@@ -1,3 +1,4 @@
+"""
 from functools import lru_cache
 
 import numpy as np
@@ -84,3 +85,17 @@ class TrajectoryDisplacementGenerator:
 
     def next_step(self):
         self.next_step_flag = True
+"""
+import numpy as np
+
+
+class TrajectoryDisplacementGenerator:
+    def __init__(self, anomalous_exponent, maximum_frame):
+        pass
+
+    def __iter__(self):
+        while True:
+            yield np.random.normal(0, 1)
+
+    def next_step(self):
+        pass
