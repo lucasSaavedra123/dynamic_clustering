@@ -99,7 +99,7 @@ if args.from_magic:
 
 dataset = filter_dataset_from_arguments(args, dataset)
 
-print(f"Average: {len(dataset)/(max(dataset[FRAME_COLUMN_NAME] + 1))}")
+print(f"Average: {len(dataset)/(max(dataset[FRAME_COLUMN_NAME]) + 1)}")
 
 if len(set(dataset[FRAME_COLUMN_NAME].values.tolist())) == 1:
     args.projection = '2d'
