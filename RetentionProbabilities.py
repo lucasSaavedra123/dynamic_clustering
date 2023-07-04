@@ -111,3 +111,7 @@ class RetentionProbabilityWithLinearFunction():
     yct = xc * sin_angle + yc * cos_angle 
 
     return max(0 , - np.sqrt((((xct/(2/(max_probability-min_probability)))**2/(g_ell_width/2.)**2) + ((yct/(2/(max_probability-min_probability)))**2/(g_ell_height/2.)**2))) + max_probability)
+
+class RetentionProbabilityEmpty():
+  def __call__(self, particle):
+      return 1
