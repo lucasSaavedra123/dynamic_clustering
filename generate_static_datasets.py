@@ -39,7 +39,7 @@ while True:
         0.6,
         40/1000,
         10/1000,
-        with_clustering=True,
+        with_clustering=np.random.choice([True, False]),
         max_number_of_no_clusterized_particles= 10000,
         minimum_level_of_percentage_molecules_range = [0, 1],
     )
