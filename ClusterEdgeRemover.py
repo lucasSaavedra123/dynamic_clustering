@@ -189,8 +189,6 @@ class ClusterEdgeRemover():
 
         #remaining_edges_weights = np.expand_dims(np.delete(grapht[0][1][:, 0], edges_to_remove, axis=0), -1) #Spatial Distance Weight
         remaining_edges_weights = np.expand_dims(np.delete(real_edges_weights, edges_to_remove, axis=0), -1) #Real Distance Weight
-
-
         remaining_edges_weights = 1 / remaining_edges_weights #Inverse Distance Weight
 
         G=nx.Graph()
