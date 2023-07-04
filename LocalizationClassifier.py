@@ -39,7 +39,7 @@ class LocalizationClassifier():
             "partition_size": [500,1000,1500,2000,2500,3000,3500,4000]
         }
 
-    def __init__(self, height=10, width=10):
+    def __init__(self, height=10, width=10, static=False):
         self._output_type = "nodes"
 
         self.magik_architecture = None
@@ -49,6 +49,7 @@ class LocalizationClassifier():
         self.hyperparameters = self.__class__.default_hyperparameters()
         self.height = height
         self.width = width
+        self.static = static
 
     @property
     def node_features(self):
@@ -90,7 +91,7 @@ class LocalizationClassifier():
         smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / ((self.hyperparameters['number_of_frames_used_in_simulations'] - 1) * FRAME_RATE)
 
         smlm_dataframe[MAGIK_DATASET_COLUMN_NAME] = set_number
-        
+
         if MAGIK_LABEL_COLUMN_NAME in smlm_dataframe.columns:
             smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(int)
         else:
@@ -98,13 +99,16 @@ class LocalizationClassifier():
 
         smlm_dataframe[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
-        smlm_dataframe = smlm_dataframe.sort_values(TIME_COLUMN_NAME, ascending=True, inplace=False)
+        if not self.static:
+            smlm_dataframe = smlm_dataframe.sort_values(TIME_COLUMN_NAME, ascending=True, inplace=False)
 
         return smlm_dataframe.reset_index(drop=True)
 
     def transform_magik_dataframe_to_smlm_dataset(self, magik_dataframe):
         magik_dataframe.loc[:, magik_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] * np.array([self.width, self.height]))
-        magik_dataframe[TIME_COLUMN_NAME] = magik_dataframe[TIME_COLUMN_NAME] * ((self.hyperparameters['number_of_frames_used_in_simulations'] - 1) * FRAME_RATE)
+        
+        if not self.static:
+            magik_dataframe[TIME_COLUMN_NAME] = magik_dataframe[TIME_COLUMN_NAME] * ((self.hyperparameters['number_of_frames_used_in_simulations'] - 1) * FRAME_RATE)
 
         magik_dataframe = magik_dataframe.rename(columns={
             MAGIK_X_POSITION_COLUMN_NAME: X_POSITION_COLUMN_NAME,
@@ -121,7 +125,10 @@ class LocalizationClassifier():
         return self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(path), set_number=set_number)
 
     def get_dataset_file_paths_from(self, path):
-        return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
+        if not self.static:
+            return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
+        else:
+            return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".tsv.csv")]
 
     def get_datasets_from_path(self, path):
         full_dataset = pd.DataFrame({})
@@ -197,7 +204,10 @@ class LocalizationClassifier():
         for setid in iterator:
             df_window = full_nodes_dataset[full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index()
 
-            list_of_edges = delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
+            if self.static:
+                list_of_edges = delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME])
+            else:
+                list_of_edges = delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
 
             new_index_to_old_index = {new_index:df_window.loc[new_index, 'index'] for new_index in df_window.index.values}
             list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
