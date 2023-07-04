@@ -40,14 +40,20 @@ def filter_dataset_from_arguments(args, dataset):
 
     return dataset
 
-def generate_colors_for_cluster_ids(max_cluster_id):
-    color_list = ['blue', 'red', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown', 'olive', 'cyan', 'black', 'magenta', 'navy', 'lime', 'darkred']
+def generate_colors_for_cluster_ids(cluster_ids):
+    color_list = ['red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown', 'olive', 'cyan', 'black', 'magenta', 'navy', 'lime', 'darkred']
     
     id_to_color = {}
     id_to_color = {0: 'grey'}
 
-    for cluster_id in range(1, int(max_cluster_id)+1):
-        id_to_color[cluster_id] = color_list[cluster_id % len(color_list)]
+    if 0 in cluster_ids:
+        cluster_ids.remove(0)
+
+    if len(cluster_ids) == 1:
+        print("Number Of Clusters:", len(cluster_ids))
+
+    for index, cluster_id in enumerate(cluster_ids):
+        id_to_color[cluster_id] = color_list[index % len(color_list)]
 
     return id_to_color
 
@@ -92,7 +98,6 @@ if args.from_magic:
             })
 
 dataset = filter_dataset_from_arguments(args, dataset)
-print(dataset)
 
 print(f"Average: {len(dataset)/(max(dataset[FRAME_COLUMN_NAME]) + 1)}")
 
@@ -117,10 +122,12 @@ if args.with_clustering:
     else:
         raise Exception("Invalid combination of parameters")
 
+    cluster_ids = list(set(dataset[column_to_pick].values.tolist()))
+
     if args.binary_clustering:
-        dataset['COLOR_COLUMN'] = dataset[column_to_pick].map(generate_colors_for_cluster_ids(max(dataset[column_to_pick])))
+        dataset['COLOR_COLUMN'] = dataset[column_to_pick].map(generate_colors_for_cluster_ids(cluster_ids))
     else:
-        dataset['COLOR_COLUMN'] = dataset[column_to_pick].map(generate_colors_for_cluster_ids(max(dataset[column_to_pick])))
+        dataset['COLOR_COLUMN'] = dataset[column_to_pick].map(generate_colors_for_cluster_ids(cluster_ids))
 
 if args.filter_flag:
     original_number_of_localizations = len(dataset)
