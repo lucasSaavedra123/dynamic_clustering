@@ -1,3 +1,13 @@
+"""Generate a fGn realization using Hosking's method.
+
+Method of generation is Hosking's method (exact method) from his paper:
+Hosking, J. R. (1984). Modeling persistence in hydrological time series
+using fractional differencing. Water resources research, 20(12),
+1898-1908.
+
+Code is a modification of https://github.com/crflynn/fbm/blob/0a0e9dc0591c3a2f0a29bdd1672469bd56563e5b/fbm/fbm.py#L229.
+"""
+
 from functools import lru_cache
 
 import numpy as np
@@ -76,11 +86,6 @@ class TrajectoryDisplacementGenerator:
                 else:
                     gn[self.position_index] = np.random.normal(0, 1)
                     fgn[self.position_index] = 0
-
-        # Scale to interval [0, T]
-        #fgn *= self.scale
-
-        #return fgn
 
     def next_step(self):
         self.next_step_flag = True
