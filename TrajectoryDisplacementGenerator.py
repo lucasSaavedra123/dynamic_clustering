@@ -5,7 +5,9 @@ Hosking, J. R. (1984). Modeling persistence in hydrological time series
 using fractional differencing. Water resources research, 20(12),
 1898-1908.
 
-Code is a modification of https://github.com/crflynn/fbm/blob/0a0e9dc0591c3a2f0a29bdd1672469bd56563e5b/fbm/fbm.py#L229.
+Code was based on 
+    https://stochastic.readthedocs.io/en/stable/_modules/stochastic/processes/noise/fractional_gaussian_noise.html 
+    https://github.com/crflynn/fbm/blob/0a0e9dc0591c3a2f0a29bdd1672469bd56563e5b/fbm/fbm.py#L229.
 """
 
 from functools import lru_cache
