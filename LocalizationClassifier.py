@@ -14,6 +14,7 @@ from scipy.spatial import Delaunay
 import tqdm
 import ghostml
 from collections import Counter
+import random
 
 from utils import delaunay_from_dataframe
 
@@ -128,6 +129,7 @@ class LocalizationClassifier():
         if not self.static:
             return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
         else:
+            #return random.sample([os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".tsv.csv")], 200)
             return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".tsv.csv")]
 
     def get_datasets_from_path(self, path):

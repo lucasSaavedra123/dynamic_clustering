@@ -34,11 +34,12 @@ class ClusterEdgeRemover():
             "partition_size": [500,1000,1500,2000,2500,3000,3500,4000]
         }
 
-    def __init__(self, height=10, width=10):
+    def __init__(self, height=10, width=10, static=False):
         self._output_type = "edges"
 
         self.magik_architecture = None
         self.threshold = 0.5
+        self.static = static
 
         self.hyperparameters = self.__class__.default_hyperparameters()
         self.height = height
@@ -50,7 +51,10 @@ class ClusterEdgeRemover():
 
     @property
     def edge_features(self):
-        return ["distance", "t-difference"]
+        if self.static:
+            return ["distance"]
+        else:
+            return ["distance", "t-difference"]
 
     def build_network(self):
         self.magik_architecture = dt.models.gnns.MAGIK(
@@ -123,7 +127,10 @@ class ClusterEdgeRemover():
         return self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(path), set_number=set_number, ignore_non_clustered_localizations=ignore_non_clustered_localizations)
 
     def get_dataset_file_paths_from(self, path):
-        return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
+        if not self.static:
+            return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
+        else:
+            return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".tsv.csv")]
 
     def get_datasets_from_path(self, path, ignore_non_clustered_localizations=True, ignore_non_clustered_experiments=False):
         """
@@ -146,101 +153,106 @@ class ClusterEdgeRemover():
     def predict(self, magik_dataset, apply_threshold=True, detect_clusters=True, verbose=True, original_dataset_path=None):
         assert not(not apply_threshold and detect_clusters), 'Cluster Detection cannot be performed without threshold apply'
 
-        magik_dataset = magik_dataset.copy()
+        if len(magik_dataset) != 0:
+            magik_dataset = magik_dataset.copy()
 
-        grapht, real_edges_weights = self.build_graph(magik_dataset, verbose=False, return_real_edges_weights=True)
+            grapht, real_edges_weights = self.build_graph(magik_dataset, verbose=False, return_real_edges_weights=True)
 
-        predictions = np.empty((len(grapht[0][1]), 1))
+            predictions = np.empty((len(grapht[0][1]), 1))
 
-        number_of_edges = len(grapht[0][2])
-        partitions_initial_index = list(range(0,number_of_edges,self.hyperparameters['partition_size']))
-        
-        for index, initial_index in enumerate(partitions_initial_index):
-            if index == len(partitions_initial_index)-1:
-                final_index = number_of_edges
+            number_of_edges = len(grapht[0][2])
+            partitions_initial_index = list(range(0,number_of_edges,self.hyperparameters['partition_size']))
+            
+            for index, initial_index in enumerate(partitions_initial_index):
+                if index == len(partitions_initial_index)-1:
+                    final_index = number_of_edges
+                else:
+                    final_index = partitions_initial_index[index+1]
+
+                considered_edges_features = grapht[0][1][initial_index:final_index]
+                considered_edges = grapht[0][2][initial_index:final_index]
+                considered_edges_weights = grapht[0][3][initial_index:final_index]
+
+                considered_nodes = np.unique(considered_edges.flatten())
+                considered_nodes_features = grapht[0][0][considered_nodes]
+
+                old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
+                considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
+
+                v = [
+                    np.expand_dims(considered_nodes_features, 0),
+                    np.expand_dims(considered_edges_features, 0),
+                    np.expand_dims(considered_edges, 0),
+                    np.expand_dims(considered_edges_weights, 0),
+                ]
+
+                with get_device():
+                    predictions[initial_index:final_index] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...] if apply_threshold else (self.magik_architecture(v).numpy())[0, ...]
+
+            if not detect_clusters:
+                return grapht[1][1], predictions
+
+            edges_to_remove = np.where(predictions == 0)[0]
+            remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
+
+            if len(remaining_edges_keep) != 0:
+                remaining_edges_weights = np.expand_dims(np.delete(grapht[0][1][:, 0], edges_to_remove, axis=0), -1) #Spatial Distance Weight
+                #remaining_edges_weights = np.expand_dims(np.delete(real_edges_weights, edges_to_remove, axis=0), -1) #Real Distance Weight
+                remaining_edges_weights = 1 / remaining_edges_weights #Inverse Distance Weight
+
+                G=nx.Graph()
+                G.add_weighted_edges_from(np.hstack((remaining_edges_keep, remaining_edges_weights)))  #Weighted Graph
+
+                """
+                #Connected Components
+                cluster_sets = nx.connected_components(G)
+                """
+
+                """
+                #Louvain Method with Weights
+                cluster_sets = nx.community.louvain_communities(G, weight='weight')
+                """
+
+
+                #Louvain Method without Weights
+                cluster_sets = nx.community.louvain_communities(G, weight=None)
+
+
+                """
+                #Greedy Modularity with Weights
+                cluster_sets = nx.community.greedy_modularity_communities(G, weight='weight')
+                """
+
+                """
+                #Greedy Modularity without Weights
+                cluster_sets = nx.community.greedy_modularity_communities(G, weight=None)
+                """
+
+                magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
+
+                for index, a_set in enumerate(cluster_sets):
+                    for value in a_set:
+                        magik_dataset.loc[value, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = index + 1
+
+                magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int)
+
+                if MAGIK_LABEL_COLUMN_NAME in magik_dataset.columns:
+                    magik_dataset[MAGIK_LABEL_COLUMN_NAME] = magik_dataset[MAGIK_LABEL_COLUMN_NAME].astype(int)
+
+                #Last Correction
+                if not self.static:
+                    cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
+
+                    if 0 in cluster_indexes_list:
+                        cluster_indexes_list.remove(0)
+
+                    for cluster_index in cluster_indexes_list:
+                        cluster_dataframe = magik_dataset[ magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == cluster_index ]
+
+                        if not (len(cluster_dataframe) >= 5 and cluster_dataframe[TIME_COLUMN_NAME].max() - cluster_dataframe[TIME_COLUMN_NAME].min() > FRAME_RATE):
+                            magik_dataset.loc[cluster_dataframe.index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
             else:
-                final_index = partitions_initial_index[index+1]
-
-            considered_edges_features = grapht[0][1][initial_index:final_index]
-            considered_edges = grapht[0][2][initial_index:final_index]
-            considered_edges_weights = grapht[0][3][initial_index:final_index]
-
-            considered_nodes = np.unique(considered_edges.flatten())
-            considered_nodes_features = grapht[0][0][considered_nodes]
-
-            old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
-            considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
-
-            v = [
-                np.expand_dims(considered_nodes_features, 0),
-                np.expand_dims(considered_edges_features, 0),
-                np.expand_dims(considered_edges, 0),
-                np.expand_dims(considered_edges_weights, 0),
-            ]
-
-            with get_device():
-                predictions[initial_index:final_index] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...] if apply_threshold else (self.magik_architecture(v).numpy())[0, ...]
-
-        if not detect_clusters:
-            return grapht[1][1], predictions
-
-        edges_to_remove = np.where(predictions == 0)[0]
-        remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
-
-        remaining_edges_weights = np.expand_dims(np.delete(grapht[0][1][:, 0], edges_to_remove, axis=0), -1) #Spatial Distance Weight
-        #remaining_edges_weights = np.expand_dims(np.delete(real_edges_weights, edges_to_remove, axis=0), -1) #Real Distance Weight
-        remaining_edges_weights = 1 / remaining_edges_weights #Inverse Distance Weight
-
-        G=nx.Graph()
-        G.add_weighted_edges_from(np.hstack((remaining_edges_keep, remaining_edges_weights)))  #Weighted Graph
-
-        """
-        #Connected Components
-        cluster_sets = nx.connected_components(G)
-        """
-
-        """
-        #Louvain Method with Weights
-        cluster_sets = nx.community.louvain_communities(G, weight='weight')
-        """
-
-
-        #Louvain Method without Weights
-        cluster_sets = nx.community.louvain_communities(G, weight=None)
-
-
-        """
-        #Greedy Modularity with Weights
-        cluster_sets = nx.community.greedy_modularity_communities(G, weight='weight')
-        """
-
-        """
-        #Greedy Modularity without Weights
-        cluster_sets = nx.community.greedy_modularity_communities(G, weight=None)
-        """
-
-        magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
-
-        for index, a_set in enumerate(cluster_sets):
-            for value in a_set:
-                magik_dataset.loc[value, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = index + 1
-
-        magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int)
-
-        if MAGIK_LABEL_COLUMN_NAME in magik_dataset.columns:
-            magik_dataset[MAGIK_LABEL_COLUMN_NAME] = magik_dataset[MAGIK_LABEL_COLUMN_NAME].astype(int)
-
-        #Last Correction
-        cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
-
-        if 0 in cluster_indexes_list:
-            cluster_indexes_list.remove(0)
-
-        for cluster_index in cluster_indexes_list:
-            cluster_dataframe = magik_dataset[ magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == cluster_index ]
-
-            if not (len(cluster_dataframe) >= 5 and cluster_dataframe[TIME_COLUMN_NAME].max() - cluster_dataframe[TIME_COLUMN_NAME].min() > FRAME_RATE):
-                magik_dataset.loc[cluster_dataframe.index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
+                magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
         #Filtered Localization Reinsertion
         if original_dataset_path is not None:
@@ -282,9 +294,11 @@ class ClusterEdgeRemover():
             list_of_edges = []
 
             list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME])
-            list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
-            list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
-            list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
+
+            if not self.static:
+                list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
+                list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
+                list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
 
             """
             columns_to_pick = [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
