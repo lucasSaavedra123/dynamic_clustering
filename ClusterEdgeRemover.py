@@ -143,10 +143,9 @@ class ClusterEdgeRemover():
         for csv_file_path in self.get_dataset_file_paths_from(path):
             set_dataframe = self.get_dataset_from_path(csv_file_path, set_number=set_index, ignore_non_clustered_localizations=ignore_non_clustered_localizations)
 
-            if not set_dataframe.empty:
-                if not set_dataframe.empty and (not ignore_non_clustered_experiments or len(set_dataframe[set_dataframe[CLUSTERIZED_COLUMN_NAME] == 1]) != 0):
-                    full_dataset = pd.concat([full_dataset, set_dataframe], ignore_index=True)
-                    set_index += 1
+            if not set_dataframe.empty and (not ignore_non_clustered_experiments or len(set_dataframe[set_dataframe[CLUSTERIZED_COLUMN_NAME] == 1]) != 0):
+                full_dataset = pd.concat([full_dataset, set_dataframe], ignore_index=True)
+                set_index += 1
 
         return full_dataset.reset_index(drop=True)
 
@@ -272,7 +271,7 @@ class ClusterEdgeRemover():
             "distance": [],
             "index_1": [],
             "index_2": [],
-            "set": [],
+            MAGIK_DATASET_COLUMN_NAME: [],
             "same_cluster": []
         })
 
@@ -290,10 +289,8 @@ class ClusterEdgeRemover():
         for setid in iterator:
             new_edges_dataframe = pd.DataFrame({'index_1': [], 'index_2': [],'distance': [], 'same_cluster': []})
             df_window = clusters_extracted_from_dbscan[clusters_extracted_from_dbscan[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index(drop=True)
-            
-            list_of_edges = []
 
-            list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME])
+            list_of_edges = delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME])
 
             if not self.static:
                 list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
@@ -314,7 +311,6 @@ class ClusterEdgeRemover():
             new_index_to_old_index = {new_index:df_window.loc[new_index, 'index'] for new_index in df_window.index.values}
             list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
             list_of_edges = np.unique(list_of_edges, axis=0).tolist() # remove duplicates
-
             list_of_edges_as_dataframe = pd.DataFrame({'index_x': [edge[0] for edge in list_of_edges], 'index_y': [edge[1] for edge in list_of_edges]})
 
             simplified_cross = list_of_edges_as_dataframe.merge(df_window.rename(columns={old_column_name: old_column_name+'_x' for old_column_name in df_window.columns}), on='index_x')

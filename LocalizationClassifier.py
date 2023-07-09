@@ -202,6 +202,7 @@ class LocalizationClassifier():
         iterator = tqdm.tqdm(sets) if verbose else sets
 
         for setid in iterator:
+            new_edges_dataframe = pd.DataFrame({'index_1': [], 'index_2': [],'distance': []})
             df_window = full_nodes_dataset[full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index()
 
             if self.static:
@@ -225,14 +226,16 @@ class LocalizationClassifier():
             
             edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
 
-            edges_dataframe = pd.concat([edges_dataframe, pd.DataFrame({
+            new_edges_dataframe = pd.concat([new_edges_dataframe, pd.DataFrame({
                 'index_1': [edge[0] for edge in edges],
                 'index_2': [edge[1] for edge in edges],
                 'distance': [value[0] for value in df_window[["distance"]].values.tolist()],
-                MAGIK_DATASET_COLUMN_NAME: [setid for _ in range(len(edges))]
             })], ignore_index=True)
 
-            edges_dataframe = edges_dataframe.drop_duplicates()
+            new_edges_dataframe = new_edges_dataframe.drop_duplicates()
+            new_edges_dataframe['set'] = setid
+            
+            edges_dataframe = pd.concat([edges_dataframe, new_edges_dataframe], ignore_index=True)
 
         edgefeatures = edges_dataframe[self.edge_features].to_numpy()
         sparseadjmtx = edges_dataframe[["index_1", "index_2"]].to_numpy().astype(int)
