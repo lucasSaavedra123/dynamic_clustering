@@ -188,8 +188,6 @@ class LocalizationClassifier():
         return magik_dataset
 
     def build_graph(self, full_nodes_dataset, verbose=True):
-        global df_window
-
         edges_dataframe = pd.DataFrame({
             "distance": [],
             "index_1": [],
