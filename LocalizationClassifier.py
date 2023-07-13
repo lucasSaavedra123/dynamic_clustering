@@ -14,13 +14,14 @@ from scipy.spatial import Delaunay
 import tqdm
 import ghostml
 from collections import Counter
+from utils import read_number_from_file, save_number_in_file
 import random
 
 from utils import delaunay_from_dataframe
 
 from deeptrack.models.gnns.generators import ContinuousGraphGenerator
 from CONSTANTS import *
-from training_utils import *
+from utils import *
 
 class LocalizationClassifier():
     @classmethod
@@ -388,7 +389,10 @@ class LocalizationClassifier():
 
             thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
 
-            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=1, subsets_size=0.2, with_replacement=False)
+            if self.static:
+                self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=1, subsets_size=0.01, with_replacement=False)
+            else:
+                self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=100, subsets_size=0.2, with_replacement=False)
 
             if positive_is_majority:
                 self.threshold = 1 - self.threshold
@@ -420,8 +424,7 @@ class LocalizationClassifier():
             json.dump(self.history_training_info, json_file)
 
     def save_threshold(self):
-        with open(self.threshold_file_name, "w") as threshold_file:
-            threshold_file.write(str(self.threshold))
+        save_number_in_file(self.threshold_file_name, self.threshold)
 
     def save_keras_model(self):
         self.magik_architecture.save_weights(self.model_file_name)
@@ -441,12 +444,10 @@ class LocalizationClassifier():
         return self.magik_architecture
 
     def load_threshold(self):
-        try:
-            with open(self.threshold_file_name, "r") as threshold_file:
-                self.threshold = float(threshold_file.read())
-        except FileNotFoundError:
+        self.threshold = read_number_from_file(self.threshold_file_name)
+
+        if self.threshold is None:
             print(f"WARNING: {self} has not found keras model file (file name:{self.threshold_file_name})")
-            return None
 
         return self.threshold
 

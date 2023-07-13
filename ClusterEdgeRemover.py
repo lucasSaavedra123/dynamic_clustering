@@ -11,10 +11,11 @@ import deeptrack as dt
 import tensorflow as tf
 import numpy as np
 import pandas as pd
+import ghostml
 import networkx as nx
 
-from training_utils import *
-from utils import delaunay_from_dataframe
+from utils import *
+from utils import delaunay_from_dataframe, save_number_in_file, read_number_from_file
 from CONSTANTS import *
 
 class ClusterEdgeRemover():
@@ -25,7 +26,8 @@ class ClusterEdgeRemover():
             "epochs": 10,
             "number_of_frames_used_in_simulations": 1000,
             "batch_size": 1,
-            "training_set_in_epoch_size": 512
+            "training_set_in_epoch_size": 512,
+            "ignore_no_clusters_experiments_during_training": True
         }
 
     @classmethod
@@ -266,7 +268,7 @@ class ClusterEdgeRemover():
 
         return magik_dataset
 
-    def build_graph(self, full_nodes_dataset, verbose=True, return_real_edges_weights=False):
+    def build_graph(self, full_nodes_dataset, verbose=True, return_real_edges_weights=False):        
         edges_dataframe = pd.DataFrame({
             "distance": [],
             "index_1": [],
@@ -290,29 +292,21 @@ class ClusterEdgeRemover():
             new_edges_dataframe = pd.DataFrame({'index_1': [], 'index_2': [],'distance': [], 'same_cluster': []})
             df_window = clusters_extracted_from_dbscan[clusters_extracted_from_dbscan[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index(drop=True)
 
-            list_of_edges = delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME])
+            if len(df_window) < 4:
+                list_of_edges = []
+            else:
+                list_of_edges = delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME])
 
-            if not self.static:
-                list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
-                list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
-                list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
+                if not self.static:
+                    list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
+                    list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
+                    list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
 
-            """
-            columns_to_pick = [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
-
-            nbrs = NearestNeighbors(n_neighbors=16, radius=0.1, n_jobs=-1).fit(df_window[columns_to_pick].values)
-            _, indices = nbrs.radius_neighbors(df_window[columns_to_pick].values)
-
-            for index in indices:
-                for sub_index in index[1:]:
-                    list_of_edges.append([index[0], sub_index])
-            """
-
-            new_index_to_old_index = {new_index:df_window.loc[new_index, 'index'] for new_index in df_window.index.values}
-            list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
-            list_of_edges = np.unique(list_of_edges, axis=0).tolist() # remove duplicates
+                new_index_to_old_index = {new_index:df_window.loc[new_index, 'index'] for new_index in df_window.index.values}
+                list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
+                list_of_edges = np.unique(list_of_edges, axis=0).tolist() # remove duplicates
+            
             list_of_edges_as_dataframe = pd.DataFrame({'index_x': [edge[0] for edge in list_of_edges], 'index_y': [edge[1] for edge in list_of_edges]})
-
             simplified_cross = list_of_edges_as_dataframe.merge(df_window.rename(columns={old_column_name: old_column_name+'_x' for old_column_name in df_window.columns}), on='index_x')
             simplified_cross = simplified_cross.merge(df_window.rename(columns={old_column_name: old_column_name+'_y' for old_column_name in df_window.columns}), on='index_y')
 
@@ -437,7 +431,16 @@ class ClusterEdgeRemover():
                 train_full_graph = pickle.load(fileObj)
                 fileObj.close()
             else:
-                train_full_graph = self.build_graph(self.get_datasets_from_path(path, ignore_non_clustered_localizations=False, ignore_non_clustered_experiments=True))
+                ignoring_non_clustered_localizations = self.get_datasets_from_path(path, ignore_non_clustered_localizations=True, ignore_non_clustered_experiments=self.hyperparameters["ignore_no_clusters_experiments_during_training"])
+
+                number_of_sets_ignoring = len(set(ignoring_non_clustered_localizations['set'].values.tolist()))
+                not_ignoring_non_clustered_localizations = self.get_datasets_from_path(path, ignore_non_clustered_localizations=False, ignore_non_clustered_experiments=self.hyperparameters["ignore_no_clusters_experiments_during_training"])
+                not_ignoring_non_clustered_localizations['set'] += number_of_sets_ignoring
+
+                dataframe_combined = pd.concat([ignoring_non_clustered_localizations, not_ignoring_non_clustered_localizations], ignore_index=True)
+
+                train_full_graph = self.build_graph(dataframe_combined)
+
                 fileObj = open(self.train_full_graph_file_name, 'wb')
                 pickle.dump(train_full_graph, fileObj)
                 fileObj.close()
@@ -495,9 +498,6 @@ class ClusterEdgeRemover():
             """
             print("Running Ghost...")
 
-            true = []
-            pred = []
-
             true, pred = self.test_with_datasets_from_path(path, apply_threshold=False, save_result=False, verbose=True, ignore_non_clustered_localizations=False)
 
             count = Counter(true)
@@ -509,9 +509,8 @@ class ClusterEdgeRemover():
 
             thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
 
-            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=1, subsets_size=0.000001, with_replacement=False)
+            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=1, subsets_size=0.00001, with_replacement=False)
             """
-
             self.threshold = 0.5
 
             if save_checkpoints:
@@ -545,8 +544,7 @@ class ClusterEdgeRemover():
         self.save_threshold()
 
     def save_threshold(self):
-        with open(self.threshold_file_name, "w") as threshold_file:
-            threshold_file.write(str(self.threshold))
+        save_number_in_file(self.threshold_file_name, self.threshold)
 
     def save_keras_model(self):
         self.magik_architecture.save_weights(self.model_file_name)
@@ -562,12 +560,10 @@ class ClusterEdgeRemover():
         return self.magik_architecture
 
     def load_threshold(self):
-        try:
-            with open(self.threshold_file_name, "r") as threshold_file:
-                self.threshold = float(threshold_file.read())
-        except FileNotFoundError:
+        self.threshold = read_number_from_file(self.threshold_file_name)
+
+        if self.threshold is None:
             print(f"WARNING: {self} has not found keras model file (file name:{self.threshold_file_name})")
-            return None
 
         return self.threshold
 
