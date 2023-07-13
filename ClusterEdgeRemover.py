@@ -15,7 +15,6 @@ import ghostml
 import networkx as nx
 
 from utils import *
-from utils import delaunay_from_dataframe, save_number_in_file, read_number_from_file
 from CONSTANTS import *
 
 class ClusterEdgeRemover():

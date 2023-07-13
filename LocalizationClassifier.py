@@ -2,26 +2,21 @@ import os
 import tqdm
 import pickle
 import json
+from collections import Counter
 
 from sklearn.metrics import confusion_matrix
-from sklearn.neighbors import NearestNeighbors
 import matplotlib.pyplot as plt
 import seaborn as sns
 import deeptrack as dt
 import numpy as np
 import pandas as pd
-from scipy.spatial import Delaunay
 import tqdm
 import ghostml
-from collections import Counter
-from utils import read_number_from_file, save_number_in_file
-import random
-
-from utils import delaunay_from_dataframe
-
 from deeptrack.models.gnns.generators import ContinuousGraphGenerator
+
 from CONSTANTS import *
 from utils import *
+
 
 class LocalizationClassifier():
     @classmethod
@@ -130,7 +125,6 @@ class LocalizationClassifier():
         if not self.static:
             return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
         else:
-            #return random.sample([os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".tsv.csv")], 200)
             return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".tsv.csv")]
 
     def get_datasets_from_path(self, path):
