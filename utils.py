@@ -316,11 +316,6 @@ def CustomEdgeBalancing():
 def get_device():
     return tf.device('/gpu:0' if len(tf.config.list_physical_devices('GPU')) == 1 else '/cpu:0')
 
-
-
-
-
-
 def delaunay_from_dataframe(dataframe, columns_to_pick):
   list_of_edges = []
 
