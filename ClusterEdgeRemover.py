@@ -11,10 +11,10 @@ import deeptrack as dt
 import tensorflow as tf
 import numpy as np
 import pandas as pd
+import ghostml
 import networkx as nx
 
-from training_utils import *
-from utils import delaunay_from_dataframe
+from utils import *
 from CONSTANTS import *
 
 class ClusterEdgeRemover():
@@ -25,7 +25,8 @@ class ClusterEdgeRemover():
             "epochs": 10,
             "number_of_frames_used_in_simulations": 1000,
             "batch_size": 1,
-            "training_set_in_epoch_size": 512
+            "training_set_in_epoch_size": 512,
+            "ignore_no_clusters_experiments_during_training": True
         }
 
     @classmethod
@@ -34,11 +35,12 @@ class ClusterEdgeRemover():
             "partition_size": [500,1000,1500,2000,2500,3000,3500,4000]
         }
 
-    def __init__(self, height=10, width=10):
+    def __init__(self, height=10, width=10, static=False):
         self._output_type = "edges"
 
         self.magik_architecture = None
         self.threshold = 0.5
+        self.static = static
 
         self.hyperparameters = self.__class__.default_hyperparameters()
         self.height = height
@@ -50,7 +52,10 @@ class ClusterEdgeRemover():
 
     @property
     def edge_features(self):
-        return ["distance", "t-difference"]
+        if self.static:
+            return ["distance"]
+        else:
+            return ["distance", "t-difference"]
 
     def build_network(self):
         self.magik_architecture = dt.models.gnns.MAGIK(
@@ -123,7 +128,10 @@ class ClusterEdgeRemover():
         return self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(path), set_number=set_number, ignore_non_clustered_localizations=ignore_non_clustered_localizations)
 
     def get_dataset_file_paths_from(self, path):
-        return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
+        if not self.static:
+            return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
+        else:
+            return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".tsv.csv")]
 
     def get_datasets_from_path(self, path, ignore_non_clustered_localizations=True, ignore_non_clustered_experiments=False):
         """
@@ -136,111 +144,115 @@ class ClusterEdgeRemover():
         for csv_file_path in self.get_dataset_file_paths_from(path):
             set_dataframe = self.get_dataset_from_path(csv_file_path, set_number=set_index, ignore_non_clustered_localizations=ignore_non_clustered_localizations)
 
-            if not set_dataframe.empty:
-                if not set_dataframe.empty and (not ignore_non_clustered_experiments or len(set_dataframe[set_dataframe[CLUSTERIZED_COLUMN_NAME] == 1]) != 0):
-                    full_dataset = pd.concat([full_dataset, set_dataframe], ignore_index=True)
-                    set_index += 1
+            if not set_dataframe.empty and (not ignore_non_clustered_experiments or len(set_dataframe[set_dataframe[CLUSTERIZED_COLUMN_NAME] == 1]) != 0):
+                full_dataset = pd.concat([full_dataset, set_dataframe], ignore_index=True)
+                set_index += 1
 
         return full_dataset.reset_index(drop=True)
 
     def predict(self, magik_dataset, apply_threshold=True, detect_clusters=True, verbose=True, original_dataset_path=None):
         assert not(not apply_threshold and detect_clusters), 'Cluster Detection cannot be performed without threshold apply'
 
-        magik_dataset = magik_dataset.copy()
+        if len(magik_dataset) != 0:
+            magik_dataset = magik_dataset.copy()
 
-        grapht, real_edges_weights = self.build_graph(magik_dataset, verbose=False, return_real_edges_weights=True)
+            grapht, real_edges_weights = self.build_graph(magik_dataset, verbose=False, return_real_edges_weights=True)
 
-        predictions = np.empty((len(grapht[0][1]), 1))
+            predictions = np.empty((len(grapht[0][1]), 1))
 
-        number_of_edges = len(grapht[0][2])
-        partitions_initial_index = list(range(0,number_of_edges,self.hyperparameters['partition_size']))
-        
-        for index, initial_index in enumerate(partitions_initial_index):
-            if index == len(partitions_initial_index)-1:
-                final_index = number_of_edges
+            number_of_edges = len(grapht[0][2])
+            partitions_initial_index = list(range(0,number_of_edges,self.hyperparameters['partition_size']))
+            
+            for index, initial_index in enumerate(partitions_initial_index):
+                if index == len(partitions_initial_index)-1:
+                    final_index = number_of_edges
+                else:
+                    final_index = partitions_initial_index[index+1]
+
+                considered_edges_features = grapht[0][1][initial_index:final_index]
+                considered_edges = grapht[0][2][initial_index:final_index]
+                considered_edges_weights = grapht[0][3][initial_index:final_index]
+
+                considered_nodes = np.unique(considered_edges.flatten())
+                considered_nodes_features = grapht[0][0][considered_nodes]
+
+                old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
+                considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
+
+                v = [
+                    np.expand_dims(considered_nodes_features, 0),
+                    np.expand_dims(considered_edges_features, 0),
+                    np.expand_dims(considered_edges, 0),
+                    np.expand_dims(considered_edges_weights, 0),
+                ]
+
+                with get_device():
+                    predictions[initial_index:final_index] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...] if apply_threshold else (self.magik_architecture(v).numpy())[0, ...]
+
+            if not detect_clusters:
+                return grapht[1][1], predictions
+
+            edges_to_remove = np.where(predictions == 0)[0]
+            remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
+
+            if len(remaining_edges_keep) != 0:
+                remaining_edges_weights = np.expand_dims(np.delete(grapht[0][1][:, 0], edges_to_remove, axis=0), -1) #Spatial Distance Weight
+                #remaining_edges_weights = np.expand_dims(np.delete(real_edges_weights, edges_to_remove, axis=0), -1) #Real Distance Weight
+                remaining_edges_weights = 1 / remaining_edges_weights #Inverse Distance Weight
+
+                G=nx.Graph()
+                G.add_weighted_edges_from(np.hstack((remaining_edges_keep, remaining_edges_weights)))  #Weighted Graph
+
+                """
+                #Connected Components
+                cluster_sets = nx.connected_components(G)
+                """
+
+                """
+                #Louvain Method with Weights
+                cluster_sets = nx.community.louvain_communities(G, weight='weight')
+                """
+
+
+                #Louvain Method without Weights
+                cluster_sets = nx.community.louvain_communities(G, weight=None)
+
+
+                """
+                #Greedy Modularity with Weights
+                cluster_sets = nx.community.greedy_modularity_communities(G, weight='weight')
+                """
+
+                """
+                #Greedy Modularity without Weights
+                cluster_sets = nx.community.greedy_modularity_communities(G, weight=None)
+                """
+
+                magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
+
+                for index, a_set in enumerate(cluster_sets):
+                    for value in a_set:
+                        magik_dataset.loc[value, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = index + 1
+
+                magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int)
+
+                if MAGIK_LABEL_COLUMN_NAME in magik_dataset.columns:
+                    magik_dataset[MAGIK_LABEL_COLUMN_NAME] = magik_dataset[MAGIK_LABEL_COLUMN_NAME].astype(int)
+
+                #Last Correction
+                if not self.static:
+                    cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
+
+                    if 0 in cluster_indexes_list:
+                        cluster_indexes_list.remove(0)
+
+                    for cluster_index in cluster_indexes_list:
+                        cluster_dataframe = magik_dataset[ magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == cluster_index ]
+
+                        if not (len(cluster_dataframe) >= 5 and cluster_dataframe[TIME_COLUMN_NAME].max() - cluster_dataframe[TIME_COLUMN_NAME].min() > FRAME_RATE):
+                            magik_dataset.loc[cluster_dataframe.index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
             else:
-                final_index = partitions_initial_index[index+1]
-
-            considered_edges_features = grapht[0][1][initial_index:final_index]
-            considered_edges = grapht[0][2][initial_index:final_index]
-            considered_edges_weights = grapht[0][3][initial_index:final_index]
-
-            considered_nodes = np.unique(considered_edges.flatten())
-            considered_nodes_features = grapht[0][0][considered_nodes]
-
-            old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
-            considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
-
-            v = [
-                np.expand_dims(considered_nodes_features, 0),
-                np.expand_dims(considered_edges_features, 0),
-                np.expand_dims(considered_edges, 0),
-                np.expand_dims(considered_edges_weights, 0),
-            ]
-
-            with get_device():
-                predictions[initial_index:final_index] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...] if apply_threshold else (self.magik_architecture(v).numpy())[0, ...]
-
-        if not detect_clusters:
-            return grapht[1][1], predictions
-
-        edges_to_remove = np.where(predictions == 0)[0]
-        remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
-
-        remaining_edges_weights = np.expand_dims(np.delete(grapht[0][1][:, 0], edges_to_remove, axis=0), -1) #Spatial Distance Weight
-        #remaining_edges_weights = np.expand_dims(np.delete(real_edges_weights, edges_to_remove, axis=0), -1) #Real Distance Weight
-        remaining_edges_weights = 1 / remaining_edges_weights #Inverse Distance Weight
-
-        G=nx.Graph()
-        G.add_weighted_edges_from(np.hstack((remaining_edges_keep, remaining_edges_weights)))  #Weighted Graph
-
-        """
-        #Connected Components
-        cluster_sets = nx.connected_components(G)
-        """
-
-        """
-        #Louvain Method with Weights
-        cluster_sets = nx.community.louvain_communities(G, weight='weight')
-        """
-
-
-        #Louvain Method without Weights
-        cluster_sets = nx.community.louvain_communities(G, weight=None)
-
-
-        """
-        #Greedy Modularity with Weights
-        cluster_sets = nx.community.greedy_modularity_communities(G, weight='weight')
-        """
-
-        """
-        #Greedy Modularity without Weights
-        cluster_sets = nx.community.greedy_modularity_communities(G, weight=None)
-        """
-
-        magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
-
-        for index, a_set in enumerate(cluster_sets):
-            for value in a_set:
-                magik_dataset.loc[value, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = index + 1
-
-        magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].astype(int)
-
-        if MAGIK_LABEL_COLUMN_NAME in magik_dataset.columns:
-            magik_dataset[MAGIK_LABEL_COLUMN_NAME] = magik_dataset[MAGIK_LABEL_COLUMN_NAME].astype(int)
-
-        #Last Correction
-        cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
-
-        if 0 in cluster_indexes_list:
-            cluster_indexes_list.remove(0)
-
-        for cluster_index in cluster_indexes_list:
-            cluster_dataframe = magik_dataset[ magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == cluster_index ]
-
-            if not (len(cluster_dataframe) >= 5 and cluster_dataframe[TIME_COLUMN_NAME].max() - cluster_dataframe[TIME_COLUMN_NAME].min() > FRAME_RATE):
-                magik_dataset.loc[cluster_dataframe.index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
+                magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
         #Filtered Localization Reinsertion
         if original_dataset_path is not None:
@@ -255,12 +267,12 @@ class ClusterEdgeRemover():
 
         return magik_dataset
 
-    def build_graph(self, full_nodes_dataset, verbose=True, return_real_edges_weights=False):
+    def build_graph(self, full_nodes_dataset, verbose=True, return_real_edges_weights=False):        
         edges_dataframe = pd.DataFrame({
             "distance": [],
             "index_1": [],
             "index_2": [],
-            "set": [],
+            MAGIK_DATASET_COLUMN_NAME: [],
             "same_cluster": []
         })
 
@@ -278,31 +290,22 @@ class ClusterEdgeRemover():
         for setid in iterator:
             new_edges_dataframe = pd.DataFrame({'index_1': [], 'index_2': [],'distance': [], 'same_cluster': []})
             df_window = clusters_extracted_from_dbscan[clusters_extracted_from_dbscan[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index(drop=True)
+
+            if len(df_window) < 4:
+                list_of_edges = []
+            else:
+                list_of_edges = delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME])
+
+                if not self.static:
+                    list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
+                    list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
+                    list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
+
+                new_index_to_old_index = {new_index:df_window.loc[new_index, 'index'] for new_index in df_window.index.values}
+                list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
+                list_of_edges = np.unique(list_of_edges, axis=0).tolist() # remove duplicates
             
-            list_of_edges = []
-
-            list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME])
-            list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
-            list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
-            list_of_edges += delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
-
-            """
-            columns_to_pick = [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
-
-            nbrs = NearestNeighbors(n_neighbors=16, radius=0.1, n_jobs=-1).fit(df_window[columns_to_pick].values)
-            _, indices = nbrs.radius_neighbors(df_window[columns_to_pick].values)
-
-            for index in indices:
-                for sub_index in index[1:]:
-                    list_of_edges.append([index[0], sub_index])
-            """
-
-            new_index_to_old_index = {new_index:df_window.loc[new_index, 'index'] for new_index in df_window.index.values}
-            list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
-            list_of_edges = np.unique(list_of_edges, axis=0).tolist() # remove duplicates
-
             list_of_edges_as_dataframe = pd.DataFrame({'index_x': [edge[0] for edge in list_of_edges], 'index_y': [edge[1] for edge in list_of_edges]})
-
             simplified_cross = list_of_edges_as_dataframe.merge(df_window.rename(columns={old_column_name: old_column_name+'_x' for old_column_name in df_window.columns}), on='index_x')
             simplified_cross = simplified_cross.merge(df_window.rename(columns={old_column_name: old_column_name+'_y' for old_column_name in df_window.columns}), on='index_y')
 
@@ -427,7 +430,16 @@ class ClusterEdgeRemover():
                 train_full_graph = pickle.load(fileObj)
                 fileObj.close()
             else:
-                train_full_graph = self.build_graph(self.get_datasets_from_path(path, ignore_non_clustered_localizations=False, ignore_non_clustered_experiments=True))
+                ignoring_non_clustered_localizations = self.get_datasets_from_path(path, ignore_non_clustered_localizations=True, ignore_non_clustered_experiments=self.hyperparameters["ignore_no_clusters_experiments_during_training"])
+
+                number_of_sets_ignoring = len(set(ignoring_non_clustered_localizations['set'].values.tolist()))
+                not_ignoring_non_clustered_localizations = self.get_datasets_from_path(path, ignore_non_clustered_localizations=False, ignore_non_clustered_experiments=self.hyperparameters["ignore_no_clusters_experiments_during_training"])
+                not_ignoring_non_clustered_localizations['set'] += number_of_sets_ignoring
+
+                dataframe_combined = pd.concat([ignoring_non_clustered_localizations, not_ignoring_non_clustered_localizations], ignore_index=True)
+
+                train_full_graph = self.build_graph(dataframe_combined)
+
                 fileObj = open(self.train_full_graph_file_name, 'wb')
                 pickle.dump(train_full_graph, fileObj)
                 fileObj.close()
@@ -485,9 +497,6 @@ class ClusterEdgeRemover():
             """
             print("Running Ghost...")
 
-            true = []
-            pred = []
-
             true, pred = self.test_with_datasets_from_path(path, apply_threshold=False, save_result=False, verbose=True, ignore_non_clustered_localizations=False)
 
             count = Counter(true)
@@ -499,9 +508,8 @@ class ClusterEdgeRemover():
 
             thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
 
-            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=1, subsets_size=0.000001, with_replacement=False)
+            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=1, subsets_size=0.00001, with_replacement=False)
             """
-
             self.threshold = 0.5
 
             if save_checkpoints:
@@ -535,8 +543,7 @@ class ClusterEdgeRemover():
         self.save_threshold()
 
     def save_threshold(self):
-        with open(self.threshold_file_name, "w") as threshold_file:
-            threshold_file.write(str(self.threshold))
+        save_number_in_file(self.threshold_file_name, self.threshold)
 
     def save_keras_model(self):
         self.magik_architecture.save_weights(self.model_file_name)
@@ -552,12 +559,10 @@ class ClusterEdgeRemover():
         return self.magik_architecture
 
     def load_threshold(self):
-        try:
-            with open(self.threshold_file_name, "r") as threshold_file:
-                self.threshold = float(threshold_file.read())
-        except FileNotFoundError:
+        self.threshold = read_number_from_file(self.threshold_file_name)
+
+        if self.threshold is None:
             print(f"WARNING: {self} has not found keras model file (file name:{self.threshold_file_name})")
-            return None
 
         return self.threshold
 

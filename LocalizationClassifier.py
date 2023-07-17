@@ -2,24 +2,21 @@ import os
 import tqdm
 import pickle
 import json
+from collections import Counter
 
 from sklearn.metrics import confusion_matrix
-from sklearn.neighbors import NearestNeighbors
 import matplotlib.pyplot as plt
 import seaborn as sns
 import deeptrack as dt
 import numpy as np
 import pandas as pd
-from scipy.spatial import Delaunay
 import tqdm
 import ghostml
-from collections import Counter
-
-from utils import delaunay_from_dataframe
-
 from deeptrack.models.gnns.generators import ContinuousGraphGenerator
+
 from CONSTANTS import *
-from training_utils import *
+from utils import *
+
 
 class LocalizationClassifier():
     @classmethod
@@ -39,7 +36,7 @@ class LocalizationClassifier():
             "partition_size": [500,1000,1500,2000,2500,3000,3500,4000]
         }
 
-    def __init__(self, height=10, width=10):
+    def __init__(self, height=10, width=10, static=False):
         self._output_type = "nodes"
 
         self.magik_architecture = None
@@ -49,6 +46,7 @@ class LocalizationClassifier():
         self.hyperparameters = self.__class__.default_hyperparameters()
         self.height = height
         self.width = width
+        self.static = static
 
     @property
     def node_features(self):
@@ -90,7 +88,7 @@ class LocalizationClassifier():
         smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / ((self.hyperparameters['number_of_frames_used_in_simulations'] - 1) * FRAME_RATE)
 
         smlm_dataframe[MAGIK_DATASET_COLUMN_NAME] = set_number
-        
+
         if MAGIK_LABEL_COLUMN_NAME in smlm_dataframe.columns:
             smlm_dataframe[MAGIK_LABEL_COLUMN_NAME] = smlm_dataframe[MAGIK_LABEL_COLUMN_NAME].astype(int)
         else:
@@ -98,13 +96,16 @@ class LocalizationClassifier():
 
         smlm_dataframe[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
-        smlm_dataframe = smlm_dataframe.sort_values(TIME_COLUMN_NAME, ascending=True, inplace=False)
+        if not self.static:
+            smlm_dataframe = smlm_dataframe.sort_values(TIME_COLUMN_NAME, ascending=True, inplace=False)
 
         return smlm_dataframe.reset_index(drop=True)
 
     def transform_magik_dataframe_to_smlm_dataset(self, magik_dataframe):
         magik_dataframe.loc[:, magik_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (magik_dataframe.loc[:, magik_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] * np.array([self.width, self.height]))
-        magik_dataframe[TIME_COLUMN_NAME] = magik_dataframe[TIME_COLUMN_NAME] * ((self.hyperparameters['number_of_frames_used_in_simulations'] - 1) * FRAME_RATE)
+        
+        if not self.static:
+            magik_dataframe[TIME_COLUMN_NAME] = magik_dataframe[TIME_COLUMN_NAME] * ((self.hyperparameters['number_of_frames_used_in_simulations'] - 1) * FRAME_RATE)
 
         magik_dataframe = magik_dataframe.rename(columns={
             MAGIK_X_POSITION_COLUMN_NAME: X_POSITION_COLUMN_NAME,
@@ -121,7 +122,10 @@ class LocalizationClassifier():
         return self.transform_smlm_dataset_to_magik_dataframe(pd.read_csv(path), set_number=set_number)
 
     def get_dataset_file_paths_from(self, path):
-        return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
+        if not self.static:
+            return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
+        else:
+            return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".tsv.csv")]
 
     def get_datasets_from_path(self, path):
         full_dataset = pd.DataFrame({})
@@ -179,8 +183,6 @@ class LocalizationClassifier():
         return magik_dataset
 
     def build_graph(self, full_nodes_dataset, verbose=True):
-        global df_window
-
         edges_dataframe = pd.DataFrame({
             "distance": [],
             "index_1": [],
@@ -195,9 +197,13 @@ class LocalizationClassifier():
         iterator = tqdm.tqdm(sets) if verbose else sets
 
         for setid in iterator:
+            new_edges_dataframe = pd.DataFrame({'index_1': [], 'index_2': [],'distance': []})
             df_window = full_nodes_dataset[full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index()
 
-            list_of_edges = delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
+            if self.static:
+                list_of_edges = delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME])
+            else:
+                list_of_edges = delaunay_from_dataframe(df_window, [MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME])
 
             new_index_to_old_index = {new_index:df_window.loc[new_index, 'index'] for new_index in df_window.index.values}
             list_of_edges = np.vectorize(new_index_to_old_index.get)(list_of_edges)
@@ -215,14 +221,16 @@ class LocalizationClassifier():
             
             edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
 
-            edges_dataframe = pd.concat([edges_dataframe, pd.DataFrame({
+            new_edges_dataframe = pd.concat([new_edges_dataframe, pd.DataFrame({
                 'index_1': [edge[0] for edge in edges],
                 'index_2': [edge[1] for edge in edges],
                 'distance': [value[0] for value in df_window[["distance"]].values.tolist()],
-                MAGIK_DATASET_COLUMN_NAME: [setid for _ in range(len(edges))]
             })], ignore_index=True)
 
-            edges_dataframe = edges_dataframe.drop_duplicates()
+            new_edges_dataframe = new_edges_dataframe.drop_duplicates()
+            new_edges_dataframe['set'] = setid
+            
+            edges_dataframe = pd.concat([edges_dataframe, new_edges_dataframe], ignore_index=True)
 
         edgefeatures = edges_dataframe[self.edge_features].to_numpy()
         sparseadjmtx = edges_dataframe[["index_1", "index_2"]].to_numpy().astype(int)
@@ -375,7 +383,10 @@ class LocalizationClassifier():
 
             thresholds = np.round(np.arange(0.05,0.95,0.025), 3)
 
-            self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=1, subsets_size=0.2, with_replacement=False)
+            if self.static:
+                self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=1, subsets_size=0.01, with_replacement=False)
+            else:
+                self.threshold = ghostml.optimize_threshold_from_predictions(true, pred, thresholds, ThOpt_metrics = 'ROC', N_subsets=100, subsets_size=0.2, with_replacement=False)
 
             if positive_is_majority:
                 self.threshold = 1 - self.threshold
@@ -407,8 +418,7 @@ class LocalizationClassifier():
             json.dump(self.history_training_info, json_file)
 
     def save_threshold(self):
-        with open(self.threshold_file_name, "w") as threshold_file:
-            threshold_file.write(str(self.threshold))
+        save_number_in_file(self.threshold_file_name, self.threshold)
 
     def save_keras_model(self):
         self.magik_architecture.save_weights(self.model_file_name)
@@ -428,12 +438,10 @@ class LocalizationClassifier():
         return self.magik_architecture
 
     def load_threshold(self):
-        try:
-            with open(self.threshold_file_name, "r") as threshold_file:
-                self.threshold = float(threshold_file.read())
-        except FileNotFoundError:
+        self.threshold = read_number_from_file(self.threshold_file_name)
+
+        if self.threshold is None:
             print(f"WARNING: {self} has not found keras model file (file name:{self.threshold_file_name})")
-            return None
 
         return self.threshold
 
