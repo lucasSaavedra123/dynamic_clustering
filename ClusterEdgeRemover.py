@@ -187,7 +187,8 @@ class ClusterEdgeRemover():
                 ]
 
                 with get_device():
-                    predictions[initial_index:final_index] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...] if apply_threshold else (self.magik_architecture(v).numpy())[0, ...]
+                    raw_predictions = self.magik_architecture(v).numpy()
+                    predictions[initial_index:final_index] = (raw_predictions > self.threshold)[0, ...] if apply_threshold else (raw_predictions)[0, ...]
 
             if not detect_clusters:
                 return grapht[1][1], predictions
@@ -196,8 +197,8 @@ class ClusterEdgeRemover():
             remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
 
             if len(remaining_edges_keep) != 0:
-                remaining_edges_weights = np.expand_dims(np.delete(grapht[0][1][:, 0], edges_to_remove, axis=0), -1) #Spatial Distance Weight
-                #remaining_edges_weights = np.expand_dims(np.delete(real_edges_weights, edges_to_remove, axis=0), -1) #Real Distance Weight
+                #remaining_edges_weights = np.expand_dims(np.delete(grapht[0][1][:, 0], edges_to_remove, axis=0), -1) #Spatial Distance Weight
+                remaining_edges_weights = np.expand_dims(np.delete(real_edges_weights, edges_to_remove, axis=0), -1) #Real Distance Weight
                 remaining_edges_weights = 1 / remaining_edges_weights #Inverse Distance Weight
 
                 G=nx.Graph()
@@ -208,15 +209,15 @@ class ClusterEdgeRemover():
                 cluster_sets = nx.connected_components(G)
                 """
 
-                """
+
                 #Louvain Method with Weights
                 cluster_sets = nx.community.louvain_communities(G, weight='weight')
+
+
                 """
-
-
                 #Louvain Method without Weights
                 cluster_sets = nx.community.louvain_communities(G, weight=None)
-
+                """
 
                 """
                 #Greedy Modularity with Weights
