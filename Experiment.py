@@ -289,8 +289,12 @@ class Experiment():
 
       if current_average_molecules_per_frame < self.average_molecules_per_frame:
         number_of_particles_not_currently_blinking = [particle for particle in all_particles if particle.blinking_battery == 0]
-        x = abs(ceil(self.average_molecules_per_frame * (self.time+1) - current_average_molecules_per_frame * (self.time+1) - number_of_particles_currently_blinking))
-        particles_that_will_blink = np.random.choice(number_of_particles_not_currently_blinking, x, replace=False)
+        number_of_particles_to_blink = abs(ceil(self.average_molecules_per_frame * (self.time+1) - current_average_molecules_per_frame * (self.time+1) - number_of_particles_currently_blinking))
+
+        if not len(number_of_particles_not_currently_blinking) < number_of_particles_to_blink:
+          particles_that_will_blink = np.random.choice(number_of_particles_not_currently_blinking, number_of_particles_to_blink, replace=False)
+        else:
+          particles_that_will_blink = number_of_particles_not_currently_blinking
 
         for particle in particles_that_will_blink:
           particle.blinking_battery = np.random.randint(self.blinking_consecutives_frames[0], self.blinking_consecutives_frames[1]+1)
