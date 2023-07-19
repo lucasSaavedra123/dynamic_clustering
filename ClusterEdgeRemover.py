@@ -21,12 +21,12 @@ class ClusterEdgeRemover():
     @classmethod
     def default_hyperparameters(cls):
         return {
-            "partition_size": 3500,
+            "partition_size": 4000,
             "epochs": 10,
             "number_of_frames_used_in_simulations": 1000,
             "batch_size": 1,
             "training_set_in_epoch_size": 512,
-            "ignore_no_clusters_experiments_during_training": True
+            "ignore_no_clusters_experiments_during_training": False
         }
 
     @classmethod
