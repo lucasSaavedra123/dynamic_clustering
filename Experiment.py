@@ -6,6 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 from scipy.stats import skewnorm
+from sklearn.neighbors import NearestNeighbors
 
 from Cluster import Cluster
 from Particle import Particle
@@ -375,56 +376,19 @@ class Experiment():
         initial_particles=[]
       )
 
-    """
-    Distance between particles is symmetric: d(p_1, p_2) = d(p_2, p_1)
-    """
-
-    distance_dictionary = {}
-
-    for molecule_one_index in range(len(non_clustered_molecules)):
-      molecule_one = non_clustered_molecules[molecule_one_index]
-      distance_dictionary[molecule_one] = {}
-
-      for molecule_two_index in range(molecule_one_index, len(non_clustered_molecules)):
-        molecule_two = non_clustered_molecules[molecule_two_index]
-        distance_dictionary[molecule_one][molecule_two] = custom_norm(molecule_one.position_at(-1), molecule_two.position_at(-1))
-
-    def get_distance_between_molecules(molecule_one, molecule_two):
-      if molecule_two in distance_dictionary[molecule_one]:
-        return distance_dictionary[molecule_one][molecule_two]
-      else:
-        return distance_dictionary[molecule_two][molecule_one]
+    nbrs = NearestNeighbors(n_jobs=-1).fit(np.array([particle.position_at(-1) for particle in non_clustered_molecules]))
 
     while non_clustered_molecule_index < len(non_clustered_molecules):
       particle = non_clustered_molecules[non_clustered_molecule_index]
 
-      """
-      We used to call np.linalg.norm to measure the distance between points:
-
-      particles_sorted_by_distance = sorted(
-        non_clustered_molecules,
-        key=lambda x: np.linalg.norm(particle.position_at(-1) - x.position_at(-1))
-      )
-
-      After a profiling analysis done to the simulation, we found out that 
-      np.linalg.norm was quite slow. Then, we were wondering if this was something
-      related with the numpy implementation or was a CPU-related problem.
-
-      To answer this, we implemented the function 'custom_norm'. The times changed
-      drastically:
-
-      One move with np.linalg.norm: 54.602 seconds
-      One move with custom_norm: 22.344 seconds
-
-      Apparently, np.linalg.norm has little overhead for little arrays
-      """
-
-      particles_sorted_by_distance = sorted(non_clustered_molecules, key=lambda x: get_distance_between_molecules(particle, x))
+      number_of_particles_selected = 2
       positions_of_all_particles_in_system = np.array([[]])
       list_of_new_particles = []
       old_centroid = None
 
-      for neighbor_particle in particles_sorted_by_distance:
+      while number_of_particles_selected < len(non_clustered_molecules) + 1:
+        neighbor_particle = non_clustered_molecules[nbrs.kneighbors([particle.position_at(-1)], number_of_particles_selected, return_distance=False)[0][-1]]
+
         if len(list_of_new_particles) == 0:
           positions_of_all_particles_in_system = np.append(positions_of_all_particles_in_system, np.array([neighbor_particle.position_at(-1)]), axis=1)
         else:
@@ -435,6 +399,7 @@ class Experiment():
         if all([candidate_new_cluster.is_inside(particle_aux) for particle_aux in list_of_new_particles+[neighbor_particle]]):
           list_of_new_particles.append(neighbor_particle)
           old_centroid = candidate_new_cluster.positions
+          number_of_particles_selected += 1
         else:
           break
 
@@ -447,6 +412,7 @@ class Experiment():
         self.clusters.append(candidate_new_cluster)
         new_clusters.append(candidate_new_cluster)
         non_clustered_molecule_index = 0
+        nbrs = NearestNeighbors(n_jobs=-1).fit(np.array([particle.position_at(-1) for particle in non_clustered_molecules]))
 
         candidate_new_cluster = Cluster(
             np.random.uniform(self.radio_range[0], self.radio_range[1]),
