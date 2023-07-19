@@ -171,7 +171,8 @@ class LocalizationClassifier():
             ]
 
             with get_device():
-                predictions[initial_index:final_index] = (self.magik_architecture(v).numpy() > self.threshold)[0, ...] if apply_threshold else (self.magik_architecture(v).numpy())[0, ...]
+                raw_predictions = self.magik_architecture(v).numpy()
+                predictions[initial_index:final_index] = (raw_predictions > self.threshold)[0, ...] if apply_threshold else (raw_predictions)[0, ...]
 
         magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = predictions
 
