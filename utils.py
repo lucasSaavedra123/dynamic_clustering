@@ -324,9 +324,16 @@ def delaunay_from_dataframe(dataframe, columns_to_pick):
   def less_first(a, b):
       return [a,b] if a < b else [b,a]
 
-  for triangle in simplices:
-      for e1, e2 in [[0,1],[1,2],[2,0]]: # for all edges of triangle
-          list_of_edges.append(less_first(triangle[e1],triangle[e2])) # always lesser index first
+  for simplex in simplices:
+    if len(simplex) == 3:
+        set_to_iterate = [[0,1],[0,2],[1,2]]
+    elif len(simplex) == 4:
+        set_to_iterate = [[0,1],[0,2],[1,2],[0,3],[1,3],[2,3]]
+    else:
+        raise Exception(f'Simplex of size {len(simplex)} are not allowed')
+
+    for e1, e2 in set_to_iterate:
+        list_of_edges.append(less_first(simplex[e1],simplex[e2]))
 
   return list_of_edges
 
