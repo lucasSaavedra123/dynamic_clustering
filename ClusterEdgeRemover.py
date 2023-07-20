@@ -193,6 +193,7 @@ class ClusterEdgeRemover():
             if not detect_clusters:
                 return grapht[1][1], predictions
 
+            #edges_to_remove = np.where(grapht[1][1] == 0)[0] #Perfect classification
             edges_to_remove = np.where(predictions == 0)[0]
             remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
 

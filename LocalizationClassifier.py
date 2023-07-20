@@ -174,6 +174,7 @@ class LocalizationClassifier():
                 raw_predictions = self.magik_architecture(v).numpy()
                 predictions[initial_index:final_index] = (raw_predictions > self.threshold)[0, ...] if apply_threshold else (raw_predictions)[0, ...]
 
+        #magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = grapht[1][0] #Perfect Classification
         magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = predictions
 
         if apply_threshold:
