@@ -79,6 +79,9 @@ validate_arguments(args)
 
 dataset = pd.read_csv(args.filename)
 
+if TIME_COLUMN_NAME not in dataset.columns:
+    dataset[TIME_COLUMN_NAME] = dataset[FRAME_COLUMN_NAME]
+
 if args.from_magic:
     dataset = dataset.rename(columns={
         MAGIK_X_POSITION_COLUMN_NAME: X_POSITION_COLUMN_NAME,
