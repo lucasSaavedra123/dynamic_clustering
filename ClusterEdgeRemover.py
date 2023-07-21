@@ -57,6 +57,10 @@ class ClusterEdgeRemover():
         else:
             return ["distance", "t-difference"]
 
+    def set_dimensions(self, height, width):
+        self.height = height
+        self.width = width
+
     def build_network(self):
         self.magik_architecture = dt.models.gnns.MAGIK(
             dense_layer_dimensions=(64, 96,),
@@ -84,6 +88,12 @@ class ClusterEdgeRemover():
             CLUSTER_ID_COLUMN_NAME+"_predicted": MAGIK_LABEL_COLUMN_NAME_PREDICTED,
         })
 
+        if TIME_COLUMN_NAME in smlm_dataframe.columns:
+            smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / ((self.hyperparameters['number_of_frames_used_in_simulations'] - 1) * FRAME_RATE)
+        else:
+            smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[FRAME_COLUMN_NAME] / (self.hyperparameters['number_of_frames_used_in_simulations'] - 1)
+            smlm_dataframe['DUMMY'] = 'to_remove'
+
         smlm_dataframe = smlm_dataframe.sort_values(TIME_COLUMN_NAME, ascending=True, inplace=False).reset_index(drop=True)
         smlm_dataframe['original_index_for_recovery'] = smlm_dataframe.index
 
@@ -95,7 +105,7 @@ class ClusterEdgeRemover():
 
         smlm_dataframe = smlm_dataframe.drop(["Unnamed: 0"], axis=1, errors="ignore")
         smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] = (smlm_dataframe.loc[:, smlm_dataframe.columns.str.contains(MAGIK_POSITION_COLUMN_NAME)] / np.array([self.width, self.height]))
-        smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[TIME_COLUMN_NAME] / ((self.hyperparameters['number_of_frames_used_in_simulations'] - 1) * FRAME_RATE)
+
         smlm_dataframe[MAGIK_DATASET_COLUMN_NAME] = set_number
 
         if MAGIK_LABEL_COLUMN_NAME in smlm_dataframe.columns:
@@ -115,10 +125,14 @@ class ClusterEdgeRemover():
             MAGIK_LABEL_COLUMN_NAME_PREDICTED: CLUSTER_ID_COLUMN_NAME+"_predicted",
         })
 
+        if not self.static:
+            if 'DUMMY' in magik_dataframe.columns:
+                magik_dataframe = magik_dataframe.drop(['DUMMY', TIME_COLUMN_NAME], axis=1, errors="ignore")
+            else:
+                magik_dataframe[TIME_COLUMN_NAME] = magik_dataframe[TIME_COLUMN_NAME] * ((self.hyperparameters['number_of_frames_used_in_simulations'] - 1) * FRAME_RATE)
+
         magik_dataframe.loc[:, X_POSITION_COLUMN_NAME] = (magik_dataframe.loc[:, X_POSITION_COLUMN_NAME] * np.array([self.width]))
         magik_dataframe.loc[:, Y_POSITION_COLUMN_NAME] = (magik_dataframe.loc[:, Y_POSITION_COLUMN_NAME] * np.array([self.height]))
-
-        magik_dataframe[TIME_COLUMN_NAME] = magik_dataframe[TIME_COLUMN_NAME] * ((self.hyperparameters['number_of_frames_used_in_simulations'] - 1) * FRAME_RATE)
 
         magik_dataframe = magik_dataframe.drop(MAGIK_DATASET_COLUMN_NAME, axis=1)
 
