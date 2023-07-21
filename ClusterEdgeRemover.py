@@ -13,6 +13,10 @@ import numpy as np
 import pandas as pd
 import ghostml
 import networkx as nx
+from shapely.geometry import MultiPoint, Point
+import os
+import tqdm
+from sklearn.neighbors import NearestNeighbors
 
 from utils import *
 from CONSTANTS import *
@@ -257,6 +261,55 @@ class ClusterEdgeRemover():
 
                 #Last Correction
                 if not self.static:
+                    magik_dataset[FRAME_COLUMN_NAME] /= magik_dataset[FRAME_COLUMN_NAME] / (self.hyperparameters['number_of_frames_used_in_simulations'] - 1)
+                    cluster_indexes_list = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].unique().tolist()
+                    cluster_id_index = 0
+
+                    if 0 in cluster_indexes_list:
+                        cluster_indexes_list.remove(0)
+
+                    while cluster_id_index < len(cluster_indexes_list):
+                        cluster_id = cluster_indexes_list[cluster_id_index]
+                        cluster_dataframe = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == cluster_id].copy()
+
+                        if len(cluster_dataframe) > 0:
+                            cluster_polygon = MultiPoint([point for point in cluster_dataframe[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]].values.tolist()]).convex_hull
+                            cluster_centroid = np.mean(cluster_dataframe[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]].values, axis=0)
+                            last_localizations_cluster_dataframe = cluster_dataframe[cluster_dataframe[FRAME_COLUMN_NAME] == cluster_dataframe[FRAME_COLUMN_NAME].max()].copy()
+
+                            if len(last_localizations_cluster_dataframe) == 1:
+                                last_localization = last_localizations_cluster_dataframe[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, FRAME_COLUMN_NAME]].values.tolist()[0]
+                            else:
+                                last_localizations = last_localizations_cluster_dataframe[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, FRAME_COLUMN_NAME]].values.tolist()
+                                centroid_distances = []
+
+                                for last_localization in last_localizations:
+                                    x = cluster_centroid[0] - last_localization[0]
+                                    y = cluster_centroid[1] - last_localization[1]
+
+                                    centroid_distances.append(((x**2)+(y**2))**(1/2))
+
+                                last_localization = last_localizations[np.argmin(centroid_distances)]
+
+                            other_clusters = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] != 0].copy()
+                            other_clusters = other_clusters[other_clusters[MAGIK_LABEL_COLUMN_NAME_PREDICTED] != cluster_id].copy()
+
+                            nbrs = NearestNeighbors(n_neighbors=1, n_jobs=-1, algorithm='kd_tree').fit(other_clusters[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, FRAME_COLUMN_NAME]].values)
+                            indices = nbrs.kneighbors([last_localization], return_distance=False)
+                            cluster_candidate_id = other_clusters.iloc[indices[0][0]][MAGIK_LABEL_COLUMN_NAME_PREDICTED]
+                            candidate_cluster_dataframe = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == cluster_candidate_id].copy()
+
+                            candidate_cluster_centroid = np.mean(candidate_cluster_dataframe[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]].values, axis=0)
+
+                            if cluster_polygon.contains(Point(candidate_cluster_centroid[0], candidate_cluster_centroid[1])):
+                                magik_dataset.loc[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == cluster_candidate_id, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = cluster_id
+                                cluster_indexes_list.remove(cluster_candidate_id)
+                            else:
+                                cluster_id_index += 1
+
+                    magik_dataset[FRAME_COLUMN_NAME] *= magik_dataset[FRAME_COLUMN_NAME] / (self.hyperparameters['number_of_frames_used_in_simulations'] - 1)
+                    magik_dataset[FRAME_COLUMN_NAME] = magik_dataset[FRAME_COLUMN_NAME].astype(int)
+
                     cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
 
                     if 0 in cluster_indexes_list:
