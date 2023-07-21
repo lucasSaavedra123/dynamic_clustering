@@ -12,8 +12,8 @@ localization_classifier.load_model()
 edge_classifier = ClusterEdgeRemover(10,10)
 edge_classifier.load_model()
 
-#TEST_DATASETS_PATH = "D:/UCA/03-Clustering Dynamics/Biological Dataset Preparation"
-TEST_DATASETS_PATH = "./Biological Dataset Preparation"
+#TEST_DATASETS_PATH = "D:/UCA/03-Clustering Dynamics/STORM Datasets"
+TEST_DATASETS_PATH = "./STORM Datasets"
 
 for dataset_file_path in tqdm.tqdm([os.path.join(TEST_DATASETS_PATH, file) for file in os.listdir(TEST_DATASETS_PATH) if file.endswith('_smlm_dataset.csv')]):
     smlm_dataset = pd.read_csv(dataset_file_path)

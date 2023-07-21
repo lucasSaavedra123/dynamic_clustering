@@ -13,8 +13,8 @@ localization_classifier.load_model()
 edge_classifier = ClusterEdgeRemover(None,None)
 edge_classifier.load_model()
 
-#TEST_DATASETS_PATH = "D:/UCA/03-Clustering Dynamics/SPT-data_TIRF_DATASETS"
-TEST_DATASETS_PATH = "./SPT-data_TIRF_DATASETS"
+#TEST_DATASETS_PATH = "D:/UCA/03-Clustering Dynamics/TIRF Datasets"
+TEST_DATASETS_PATH = "./TIRF Datasets"
 
 for dataset_file_path in tqdm.tqdm([os.path.join(TEST_DATASETS_PATH, file) for file in os.listdir(TEST_DATASETS_PATH) if file.endswith('_tirf.csv')]):
     smlm_dataset = pd.read_csv(dataset_file_path)

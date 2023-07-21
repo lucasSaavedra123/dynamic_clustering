@@ -261,7 +261,6 @@ class ClusterEdgeRemover():
 
                 #Last Correction
                 if not self.static:
-                    magik_dataset[FRAME_COLUMN_NAME] /= magik_dataset[FRAME_COLUMN_NAME] / (self.hyperparameters['number_of_frames_used_in_simulations'] - 1)
                     cluster_indexes_list = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].unique().tolist()
                     cluster_id_index = 0
 
@@ -275,12 +274,12 @@ class ClusterEdgeRemover():
                         if len(cluster_dataframe) > 0:
                             cluster_polygon = MultiPoint([point for point in cluster_dataframe[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]].values.tolist()]).convex_hull
                             cluster_centroid = np.mean(cluster_dataframe[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]].values, axis=0)
-                            last_localizations_cluster_dataframe = cluster_dataframe[cluster_dataframe[FRAME_COLUMN_NAME] == cluster_dataframe[FRAME_COLUMN_NAME].max()].copy()
+                            last_localizations_cluster_dataframe = cluster_dataframe[cluster_dataframe[TIME_COLUMN_NAME] == cluster_dataframe[TIME_COLUMN_NAME].max()].copy()
 
                             if len(last_localizations_cluster_dataframe) == 1:
-                                last_localization = last_localizations_cluster_dataframe[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, FRAME_COLUMN_NAME]].values.tolist()[0]
+                                last_localization = last_localizations_cluster_dataframe[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]].values.tolist()[0]
                             else:
-                                last_localizations = last_localizations_cluster_dataframe[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, FRAME_COLUMN_NAME]].values.tolist()
+                                last_localizations = last_localizations_cluster_dataframe[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]].values.tolist()
                                 centroid_distances = []
 
                                 for last_localization in last_localizations:
@@ -294,7 +293,7 @@ class ClusterEdgeRemover():
                             other_clusters = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] != 0].copy()
                             other_clusters = other_clusters[other_clusters[MAGIK_LABEL_COLUMN_NAME_PREDICTED] != cluster_id].copy()
 
-                            nbrs = NearestNeighbors(n_neighbors=1, n_jobs=-1, algorithm='kd_tree').fit(other_clusters[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, FRAME_COLUMN_NAME]].values)
+                            nbrs = NearestNeighbors(n_neighbors=1, n_jobs=-1, algorithm='kd_tree').fit(other_clusters[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]].values)
                             indices = nbrs.kneighbors([last_localization], return_distance=False)
                             cluster_candidate_id = other_clusters.iloc[indices[0][0]][MAGIK_LABEL_COLUMN_NAME_PREDICTED]
                             candidate_cluster_dataframe = magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] == cluster_candidate_id].copy()
@@ -306,9 +305,6 @@ class ClusterEdgeRemover():
                                 cluster_indexes_list.remove(cluster_candidate_id)
                             else:
                                 cluster_id_index += 1
-
-                    magik_dataset[FRAME_COLUMN_NAME] *= magik_dataset[FRAME_COLUMN_NAME] / (self.hyperparameters['number_of_frames_used_in_simulations'] - 1)
-                    magik_dataset[FRAME_COLUMN_NAME] = magik_dataset[FRAME_COLUMN_NAME].astype(int)
 
                     cluster_indexes_list = list(set(magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]))
 
