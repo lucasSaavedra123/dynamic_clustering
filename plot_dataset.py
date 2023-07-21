@@ -81,6 +81,9 @@ dataset = pd.read_csv(args.filename)
 
 if TIME_COLUMN_NAME not in dataset.columns:
     dataset[TIME_COLUMN_NAME] = dataset[FRAME_COLUMN_NAME]
+    TIME_PLOT_LABEL = 'Frame'
+else:
+    TIME_PLOT_LABEL = 't[s]'
 
 if args.from_magic:
     dataset = dataset.rename(columns={
@@ -152,7 +155,7 @@ if args.projection == '3d' or args.save_plots:
         ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[TIME_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], s=1)
 
     ax.set_xlabel('x[um]')
-    ax.set_ylabel('t[s]')
+    ax.set_ylabel(TIME_PLOT_LABEL)
     ax.set_zlabel('y[um]')
 
     if args.save_plots:
