@@ -85,6 +85,12 @@ validate_arguments(args)
 
 dataset = pd.read_csv(args.filename)
 
+if TIME_COLUMN_NAME not in dataset.columns:
+    dataset[TIME_COLUMN_NAME] = dataset[FRAME_COLUMN_NAME]
+    TIME_PLOT_LABEL = 'Frame'
+else:
+    TIME_PLOT_LABEL = 't[s]'
+
 if args.from_magic:
     dataset = dataset.rename(columns={
         MAGIK_X_POSITION_COLUMN_NAME: X_POSITION_COLUMN_NAME,
@@ -105,7 +111,10 @@ if args.from_magic:
 
 dataset = filter_dataset_from_arguments(args, dataset)
 
-print(f"Average: {len(dataset)/max(dataset[FRAME_COLUMN_NAME])}")
+print(f"Average: {len(dataset)/(max(dataset[FRAME_COLUMN_NAME]) + 1)}")
+
+if len(set(dataset[FRAME_COLUMN_NAME].values.tolist())) == 1:
+    args.projection = '2d'
 
 if args.predicted and args.show_performance and args.with_clustering:
     if args.binary_clustering:
@@ -152,7 +161,7 @@ if args.projection == '3d' or args.save_plots:
         ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[TIME_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], s=1)
 
     ax.set_xlabel('x[um]')
-    ax.set_ylabel('t[s]')
+    ax.set_ylabel(TIME_PLOT_LABEL)
     ax.set_zlabel('y[um]')
 
     if args.save_plots:
