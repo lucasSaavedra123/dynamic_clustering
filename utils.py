@@ -14,6 +14,11 @@ def save_number_in_file(file_name, number):
     with open(file_name, "w") as new_file:
         new_file.write(str(number))
 
+def save_numbers_in_file(file_name, list_of_numbers):
+    with open(file_name, "w") as new_file:
+        for number in list_of_numbers:
+            new_file.write(str(number)+'\n')
+
 def read_number_from_file(file_name, if_doesnt_exist_return=None):
     try:
         with open(file_name, "r") as file_to_read:
