@@ -6,13 +6,13 @@ import pandas as pd
 import tqdm
 
 from LocalizationClassifier import LocalizationClassifier
-from ClusterEdgeRemover import ClusterEdgeRemover
+from ClusterDetector import ClusterDetector
 
 
 localization_classifier = LocalizationClassifier(10,10)
 localization_classifier.load_model()
 
-edge_classifier = ClusterEdgeRemover(10,10)
+edge_classifier = ClusterDetector(10,10)
 edge_classifier.load_model()
 
 TEST_DATASETS_PATH = "./datasets_shuffled/test"

@@ -21,7 +21,7 @@ from sklearn.neighbors import NearestNeighbors
 from utils import *
 from CONSTANTS import *
 
-class ClusterEdgeRemover():
+class ClusterDetector():
     @classmethod
     def default_hyperparameters(cls):
         return {

@@ -5,12 +5,12 @@ import tqdm
 
 from CONSTANTS import *
 from LocalizationClassifier import LocalizationClassifier
-from ClusterEdgeRemover import ClusterEdgeRemover
+from ClusterDetector import ClusterDetector
 
 localization_classifier = LocalizationClassifier(None,None)
 localization_classifier.load_model()
 
-edge_classifier = ClusterEdgeRemover(None,None)
+edge_classifier = ClusterDetector(None,None)
 edge_classifier.load_model()
 
 #TEST_DATASETS_PATH = "D:/UCA/03-Clustering Dynamics/TIRF Datasets"

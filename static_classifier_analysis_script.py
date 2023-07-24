@@ -4,7 +4,7 @@ import time
 import pandas as pd
 import tqdm
 
-from ClusterEdgeRemover import ClusterEdgeRemover
+from ClusterDetector import ClusterDetector
 from LocalizationClassifier import LocalizationClassifier
 from utils import predict_on_dataset, delete_file_if_exist, save_number_in_file
 
@@ -19,7 +19,7 @@ localization_classifier.save_model()
 
 delete_file_if_exist(localization_classifier.train_full_graph_file_name)
 
-edge_classifier = ClusterEdgeRemover(40000,40000, static=True)
+edge_classifier = ClusterDetector(40000,40000, static=True)
 edge_classifier.hyperparameters['partition_size'] = 4000
 
 edge_classifier.fit_with_datasets_from_path(DATASET_PATH, save_checkpoints=True)
