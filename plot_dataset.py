@@ -49,9 +49,6 @@ def generate_colors_for_cluster_ids(cluster_ids):
     if 0 in cluster_ids:
         cluster_ids.remove(0)
 
-    if len(cluster_ids) == 1:
-        print("Number Of Clusters:", len(cluster_ids))
-
     for index, cluster_id in enumerate(cluster_ids):
         id_to_color[cluster_id] = color_list[index % len(color_list)]
 
