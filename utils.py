@@ -3,9 +3,15 @@ import os
 from collections import Counter
 
 import numpy as np
+import pandas as pd
 import tensorflow as tf
+import tqdm
 import keras.backend as K
 from scipy.spatial import Delaunay
+import more_itertools as mit
+import tqdm
+from operator import is_not
+from functools import partial
 
 from CONSTANTS import *
 
@@ -358,3 +364,72 @@ def predict_on_dataset(smlm_dataset, localization_classifier, edge_classifier):
     os.remove(TEMPORAL_FILE_NAME)
 
     return smlm_dataset
+
+def build_graph_with_spatio_temporal_criterion(full_nodes_dataset, radius, nofframes, edge_features, node_features):
+        edges_dataframe = pd.DataFrame({
+            "distance": [],
+            "index_1": [],
+            "index_2": [],
+            MAGIK_DATASET_COLUMN_NAME: [],
+        })
+
+        full_nodes_dataset = full_nodes_dataset.copy()
+
+        sets = np.unique(full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME])
+
+        for setid in sets:
+            df_set = full_nodes_dataset[full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME] == setid].copy().reset_index()
+
+            maxframe = range(0, df_set[FRAME_COLUMN_NAME].max() + 1 + nofframes)
+
+            windows = mit.windowed(maxframe, n=nofframes, step=1)
+            windows = map(lambda x: list(filter(partial(is_not, None), x)), windows)
+            windows = list(windows)[:-2]
+
+            new_edges_dataframe = pd.DataFrame({'index_1': [], 'index_2': [],'distance': []})
+
+            for window in windows:
+                # remove excess frames
+                window = [elem for elem in window if elem <= df_set[FRAME_COLUMN_NAME].max()]
+
+                df_window = df_set[df_set[FRAME_COLUMN_NAME].isin(window)].copy()
+                df_window = df_window.merge(df_window, how='cross')
+                df_window = df_window[df_window['index_x'] != df_window['index_y']]
+                df_window['distance-x'] = df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_y"]
+                df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
+                df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
+                df_window = df_window[df_window['distance'] < radius]
+
+                edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
+
+                new_edges_dataframe = pd.concat([new_edges_dataframe, pd.DataFrame({
+                    'index_1': [edge[0] for edge in edges],
+                    'index_2': [edge[1] for edge in edges],
+                    'distance': [value[0] for value in df_window[["distance"]].values.tolist()]
+                })], ignore_index=True)
+
+            new_edges_dataframe = new_edges_dataframe.drop_duplicates()
+            new_edges_dataframe[MAGIK_DATASET_COLUMN_NAME] = setid
+            edges_dataframe = pd.concat([edges_dataframe, new_edges_dataframe], ignore_index=True)
+
+        edgefeatures = edges_dataframe[edge_features].to_numpy()
+        sparseadjmtx = edges_dataframe[["index_1", "index_2"]].to_numpy().astype(int)
+        nodefeatures = full_nodes_dataset[node_features].to_numpy()
+
+        edgeweights = np.ones(sparseadjmtx.shape[0])
+        edgeweights = np.stack((np.arange(0, edgeweights.shape[0]), edgeweights), axis=1)
+
+        nfsolution = full_nodes_dataset[[MAGIK_LABEL_COLUMN_NAME]].to_numpy()
+        efsolution = np.zeros((len(edgefeatures), 1))
+
+        nodesets = full_nodes_dataset[[MAGIK_DATASET_COLUMN_NAME]].to_numpy().astype(int)
+        edgesets = edges_dataframe[[MAGIK_DATASET_COLUMN_NAME]].to_numpy().astype(int)
+        framesets = full_nodes_dataset[[FRAME_COLUMN_NAME]].to_numpy().astype(int)
+
+        global_property = np.zeros(np.unique(full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME]).shape[0])
+
+        return (
+            (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
+            (nfsolution, efsolution, global_property),
+            (nodesets, edgesets, framesets)
+        )
