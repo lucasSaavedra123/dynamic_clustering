@@ -3,6 +3,9 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, f1_score, adjusted_rand_score
 import seaborn as sns
 import numpy as np
+from scipy.spatial import ConvexHull
+import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon
 
 from CONSTANTS import *
 
@@ -49,9 +52,6 @@ def generate_colors_for_cluster_ids(cluster_ids, discriminator=None):
     if 0 in cluster_ids:
         cluster_ids.remove(0)
 
-    if len(cluster_ids) == 1:
-        print("Number Of Clusters:", len(cluster_ids))
-
     for index, cluster_id in enumerate(cluster_ids):
         if discriminator is not None:
             if cluster_id == discriminator:
@@ -70,9 +70,10 @@ parser.add_argument("-c", "--with-clustering", default=False, dest="with_cluster
 parser.add_argument("-s", "--save_plots", default=False, dest="save_plots", action=BooleanOptionalAction)
 parser.add_argument("-r", "--filter_flag", default=False, dest="filter_flag", action=BooleanOptionalAction)
 parser.add_argument("-b", "--binary_clustering", default=False, dest="binary_clustering", action=BooleanOptionalAction)
-parser.add_argument("-i", "--predicted", default=False, dest="predicted", action=BooleanOptionalAction)
+parser.add_argument("-i", "--inferenced", default=False, dest="inferenced", action=BooleanOptionalAction)
 parser.add_argument("-a", "--show_performance", default=False, dest="show_performance", action=BooleanOptionalAction)
 parser.add_argument("-m", "--from_magic", default=False, dest="from_magic", action=BooleanOptionalAction)
+parser.add_argument("-t", "--show_tracks", default=False, dest="show_tracks", action=BooleanOptionalAction)
 
 #Range Arguments
 parser.add_argument('-fr', '--frame_range', type=int, nargs='+', default=[])
@@ -116,20 +117,20 @@ print(f"Average: {len(dataset)/(max(dataset[FRAME_COLUMN_NAME]) + 1)}")
 if len(set(dataset[FRAME_COLUMN_NAME].values.tolist())) == 1:
     args.projection = '2d'
 
-if args.predicted and args.show_performance and args.with_clustering:
+if args.inferenced and args.show_performance and args.with_clustering:
     if args.binary_clustering:
         print("F1 Score:", f1_score(dataset[CLUSTERIZED_COLUMN_NAME], dataset[CLUSTERIZED_COLUMN_NAME + '_predicted']))
     else:
         print("ARI:", adjusted_rand_score(dataset[CLUSTER_ID_COLUMN_NAME], dataset[CLUSTER_ID_COLUMN_NAME + '_predicted']))
 
 if args.with_clustering:
-    if args.predicted and args.binary_clustering:
+    if args.inferenced and args.binary_clustering:
         column_to_pick = CLUSTERIZED_COLUMN_NAME + '_predicted'
-    elif args.predicted and (not args.binary_clustering):
+    elif args.inferenced and (not args.binary_clustering):
         column_to_pick = CLUSTER_ID_COLUMN_NAME + '_predicted'
-    elif (not args.predicted) and args.binary_clustering:
+    elif (not args.inferenced) and args.binary_clustering:
         column_to_pick = CLUSTERIZED_COLUMN_NAME
-    elif (not args.predicted) and (not args.binary_clustering):
+    elif (not args.inferenced) and (not args.binary_clustering):
         column_to_pick = CLUSTER_ID_COLUMN_NAME
     else:
         raise Exception("Invalid combination of parameters")
@@ -140,10 +141,12 @@ if args.with_clustering:
         dataset['COLOR_COLUMN'] = dataset[column_to_pick].map(generate_colors_for_cluster_ids(cluster_ids))
     else:
         dataset['COLOR_COLUMN'] = dataset[column_to_pick].map(generate_colors_for_cluster_ids(cluster_ids))
+else:
+    dataset['COLOR_COLUMN'] = 'blue'
 
 if args.filter_flag:
     original_number_of_localizations = len(dataset)
-    if args.predicted:
+    if args.inferenced:
         dataset = dataset[dataset[CLUSTERIZED_COLUMN_NAME + '_predicted'] == 1]
     else:
         dataset = dataset[dataset[CLUSTERIZED_COLUMN_NAME] == 1]
@@ -155,10 +158,19 @@ if args.projection == '3d' or args.save_plots:
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
-    if args.with_clustering:
-        ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[TIME_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], c=dataset['COLOR_COLUMN'], s=1)
-    else:
-        ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[TIME_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], s=1)
+    ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[TIME_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], c=dataset['COLOR_COLUMN'], s=1)
+
+    if args.show_tracks:
+        particles_id = np.unique(dataset[PARTICLE_ID_COLUMN_NAME].values)
+
+        for particle_id in particles_id:
+            particle_data = dataset[dataset[PARTICLE_ID_COLUMN_NAME] == particle_id].sort_values(TIME_COLUMN_NAME).copy()
+            particle_data_positions = particle_data[[X_POSITION_COLUMN_NAME, TIME_COLUMN_NAME, Y_POSITION_COLUMN_NAME]].values
+
+            track_length = len(particle_data)
+
+            for position_index in range(track_length-1):
+                ax.plot( particle_data_positions[position_index:position_index+2,0], particle_data_positions[position_index:position_index+2,1], particle_data_positions[position_index:position_index+2,2], color = particle_data['COLOR_COLUMN'].values[position_index] )
 
     ax.set_xlabel('x[um]')
     ax.set_ylabel(TIME_PLOT_LABEL)
@@ -173,10 +185,30 @@ if args.projection == '2d' or args.save_plots:
     fig = plt.figure()
     ax = fig.add_subplot()
 
-    if args.with_clustering:
-        ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], c=dataset['COLOR_COLUMN'], s=1)
-    else:
-        ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], s=1)
+    ax.scatter(dataset[X_POSITION_COLUMN_NAME], dataset[Y_POSITION_COLUMN_NAME], c=dataset['COLOR_COLUMN'], s=1)
+
+    if args.show_tracks:
+        particles_id = np.unique(dataset[PARTICLE_ID_COLUMN_NAME].values)
+        cluster_ids = np.unique(dataset[CLUSTER_ID_COLUMN_NAME+'_predicted'].values).tolist()
+        cluster_ids.remove(0)
+
+        for cluster_id in cluster_ids:
+                cluster_data_positions = dataset[dataset[CLUSTER_ID_COLUMN_NAME+'_predicted'] == cluster_id][[X_POSITION_COLUMN_NAME, Y_POSITION_COLUMN_NAME]].values
+
+                if len(cluster_data_positions) > 3:
+                    hull = ConvexHull(cluster_data_positions)
+
+                    for simplex in hull.simplices:
+                        ax.plot(cluster_data_positions[simplex, 0], cluster_data_positions[simplex, 1], 'c')
+                    #ax.plot(cluster_data_positions[hull.vertices, 0], cluster_data_positions[hull.vertices, 1], 'o', mec='r', color='none', lw=1, markersize=10)
+
+        for particle_id in particles_id:
+            particle_data = dataset[dataset[PARTICLE_ID_COLUMN_NAME] == particle_id].sort_values(TIME_COLUMN_NAME).copy()
+            particle_data_positions = particle_data[[X_POSITION_COLUMN_NAME, Y_POSITION_COLUMN_NAME]].values
+            track_length = len(particle_data)
+
+            for position_index in range(track_length-1):
+                ax.plot( particle_data_positions[position_index:position_index+2,0], particle_data_positions[position_index:position_index+2,1], color = particle_data['COLOR_COLUMN'].values[position_index] )
 
     ax.set_xlabel('x[um]')
     ax.set_ylabel('y[um]')
