@@ -438,7 +438,7 @@ def build_graph_with_spatio_temporal_criterion(full_nodes_dataset, radius, noffr
         )
 
 
-def styled_plotting(dataset, detection_alpha=0.1, with_clustering=False, spatial_unit='um'):
+def styled_plotting(dataset_path, t_limit=None, detection_alpha=0.1, with_clustering=False, spatial_unit='um', save_plot=False, plot_trajectories=False):
     """
     This function recreates localization datasets plotting from the following paper:
 
@@ -448,11 +448,19 @@ def styled_plotting(dataset, detection_alpha=0.1, with_clustering=False, spatial
     DOI: 10.1038/s41467-023-38866-y
     """
 
+    dataset = pd.read_csv(dataset_path)
+    dataset = dataset.groupby(['x', 'y']).first().reset_index()
+
+    if t_limit is not None:
+        assert t_limit[0] <= t_limit[1]
+        dataset = dataset[dataset['t'] >= t_limit[0]].copy()
+        dataset = dataset[dataset['t'] <= t_limit[1]].copy()
+
     dataset['normalized_time'] = dataset['t'] - dataset['t'].min()
     dataset['normalized_time'] /= dataset['normalized_time'].max()
 
     if CLUSTER_ID_COLUMN_NAME+'_predicted' in dataset.columns and with_clustering:
-        cluster_ids = np.unique(dataset['cluster_id_predicted'].values).tolist()
+        cluster_ids = np.unique(dataset[CLUSTER_ID_COLUMN_NAME+'_predicted'].values).tolist()
         cluster_ids.remove(0)
     else:
         cluster_ids = []
@@ -466,7 +474,8 @@ def styled_plotting(dataset, detection_alpha=0.1, with_clustering=False, spatial
 
     x_plot,y_plot,t_plot= dataset['x'].values.tolist(), dataset['y'].values.tolist(), dataset['t'].values.tolist()
 
-    ax0.scatter(x_plot,y_plot,c="w",s=3,linewidth=0,alpha=detection_alpha)	
+    ax0.scatter(x_plot,y_plot,c="w",s=3,linewidth=0,alpha=detection_alpha)
+
     ax0.set_facecolor("k")
     ax0.set_xlabel(f"X [{spatial_unit}]")
     ax0.set_ylabel(f"Y [{spatial_unit}]")	
@@ -477,6 +486,11 @@ def styled_plotting(dataset, detection_alpha=0.1, with_clustering=False, spatial
     ax0.imshow([[0,1], [0,1]], extent = (xlims[0],xlims[1],ylims[0],ylims[1]), cmap = cmap, interpolation = 'bicubic', alpha=0)
     plt.tight_layout()
 
+    if plot_trajectories:
+        for particle_id in np.unique(dataset[PARTICLE_ID_COLUMN_NAME].values).tolist():
+            particle_data = dataset[dataset[PARTICLE_ID_COLUMN_NAME] == particle_id].sort_values('t')[['x', 'y']]
+            ax0.add_artist(matplotlib.lines.Line2D(particle_data[X_POSITION_COLUMN_NAME],particle_data[Y_POSITION_COLUMN_NAME],c='w',alpha=0.25,linewidth=0.5)) 
+
     if with_clustering:
         cmap = matplotlib.cm.get_cmap('brg')
         
@@ -484,7 +498,7 @@ def styled_plotting(dataset, detection_alpha=0.1, with_clustering=False, spatial
         sm.set_array([])
 
         for cluster_id in cluster_ids:
-            cluster_data = dataset[dataset['cluster_id_predicted'] == cluster_id][['x', 'y', 'normalized_time']].copy()
+            cluster_data = dataset[dataset[CLUSTER_ID_COLUMN_NAME+'_predicted'] == cluster_id][['x', 'y', 'normalized_time']].copy()
             cluster_data_positions = cluster_data[['x', 'y']].values
 
             if len(cluster_data_positions) >= 3:
@@ -497,8 +511,11 @@ def styled_plotting(dataset, detection_alpha=0.1, with_clustering=False, spatial
         fmt = lambda x, pos: r'     $t_{min}$' if pos == 0 else r'$t_{max}$'
         cbar = plt.colorbar(sm, cax=cbaxes, orientation='horizontal', ticks=[0, 1], ticklocation='top', format=FuncFormatter(fmt))
         cbar.ax.xaxis.set_tick_params(pad=0, labelsize=10)
-        cbar.set_label('Time', color='white', fontsize=10, labelpad=-7)
+        
+        #cbar.set_label('Time', color='white', fontsize=10, labelpad=-7)
         plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='white')
 
-    plt.show()
-    #plt.savefig('a.png',dpi=300)
+    if save_plot:
+        plt.savefig(dataset_path+'_styled_figure.png',dpi=700)
+    else:
+        plt.show()
