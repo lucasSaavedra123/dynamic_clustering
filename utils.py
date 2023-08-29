@@ -5,13 +5,16 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import tqdm
+import matplotlib
 import keras.backend as K
 from scipy.spatial import Delaunay
 import more_itertools as mit
-import tqdm
 from operator import is_not
 from functools import partial
+import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from scipy.spatial import ConvexHull
+from matplotlib.ticker import FuncFormatter
 
 from CONSTANTS import *
 
@@ -433,3 +436,69 @@ def build_graph_with_spatio_temporal_criterion(full_nodes_dataset, radius, noffr
             (nfsolution, efsolution, global_property),
             (nodesets, edgesets, framesets)
         )
+
+
+def styled_plotting(dataset, detection_alpha=0.1, with_clustering=False, spatial_unit='um'):
+    """
+    This function recreates localization datasets plotting from the following paper:
+
+    Super-resolved trajectory-derived nanoclustering analysis using spatiotemporal indexing
+    T. P. Wallis, A. Jiang, K. Young, H. Hou, K. Kudo, A. J. McCann, et al.
+    Nature Communications 2023 Vol. 14 Issue 1 Pages 3353
+    DOI: 10.1038/s41467-023-38866-y
+    """
+
+    if CLUSTER_ID_COLUMN_NAME+'_predicted' in dataset.columns and with_clustering:
+        cluster_ids = np.unique(dataset['cluster_id_predicted'].values).tolist()
+        cluster_ids.remove(0)
+    else:
+        cluster_ids = []
+
+    plt.rcdefaults() 
+    font = {"family" : "Arial","size": 12} 
+    matplotlib.rc('font', **font)
+
+    ax0 = plt.subplot(111)
+    ax0.cla()
+
+    x_plot,y_plot,t_plot= dataset['x'].values.tolist(), dataset['y'].values.tolist(), dataset['t'].values.tolist()
+
+    ax0.scatter(x_plot,y_plot,c="w",s=3,linewidth=0,alpha=detection_alpha)	
+    ax0.set_facecolor("k")
+    ax0.set_xlabel(f"X [{spatial_unit}]")
+    ax0.set_ylabel(f"Y [{spatial_unit}]")	
+    xlims = plt.xlim()
+    ylims = plt.ylim()
+
+    cmap = matplotlib.cm.get_cmap('brg')
+    ax0.imshow([[0,1], [0,1]], extent = (xlims[0],xlims[1],ylims[0],ylims[1]), cmap = cmap, interpolation = 'bicubic', alpha=0)
+    plt.tight_layout()
+
+    if with_clustering:
+        min_dataset_time = dataset['t'].min()
+        max_dataset_time = dataset['t'].max()
+        N = 100
+        norm = matplotlib.colors.Normalize(vmin=min_dataset_time, vmax=max_dataset_time)
+        cmap = plt.get_cmap('jet', N)
+        
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+
+        for cluster_id in cluster_ids:
+            cluster_data = dataset[dataset['cluster_id_predicted'] == cluster_id][['x', 'y', 't']].copy()
+            cluster_data_positions = cluster_data[['x', 'y']].values
+
+            if len(cluster_data_positions) > 3:
+                hull = ConvexHull(cluster_data_positions)
+
+                for simplex in hull.simplices:
+                    ax0.plot(cluster_data_positions[simplex, 0], cluster_data_positions[simplex, 1], c=cmap(cluster_data['t'].mean()))
+
+        cbaxes = inset_axes(ax0, width="30%", height="3%", loc=3)
+        fmt = lambda x, pos: f'       {x}' if pos == 0 else f'{x}s        '
+        cbar = plt.colorbar(sm, cax=cbaxes, orientation='horizontal', ticks=[min_dataset_time, max_dataset_time], ticklocation='top', format=FuncFormatter(fmt))
+        cbar.ax.xaxis.set_tick_params(pad=0, labelsize=10)
+        cbar.set_label('Time', color='white', fontsize=10, labelpad=-7)
+        plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='white')
+
+    plt.show()
