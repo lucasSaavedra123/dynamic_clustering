@@ -448,6 +448,9 @@ def styled_plotting(dataset, detection_alpha=0.1, with_clustering=False, spatial
     DOI: 10.1038/s41467-023-38866-y
     """
 
+    dataset['normalized_time'] = dataset['t'] - dataset['t'].min()
+    dataset['normalized_time'] /= dataset['normalized_time'].max()
+
     if CLUSTER_ID_COLUMN_NAME+'_predicted' in dataset.columns and with_clustering:
         cluster_ids = np.unique(dataset['cluster_id_predicted'].values).tolist()
         cluster_ids.remove(0)
@@ -475,30 +478,27 @@ def styled_plotting(dataset, detection_alpha=0.1, with_clustering=False, spatial
     plt.tight_layout()
 
     if with_clustering:
-        min_dataset_time = dataset['t'].min()
-        max_dataset_time = dataset['t'].max()
-        N = 100
-        norm = matplotlib.colors.Normalize(vmin=min_dataset_time, vmax=max_dataset_time)
-        cmap = plt.get_cmap('jet', N)
+        cmap = matplotlib.cm.get_cmap('brg')
         
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm = plt.cm.ScalarMappable(cmap=cmap)
         sm.set_array([])
 
         for cluster_id in cluster_ids:
-            cluster_data = dataset[dataset['cluster_id_predicted'] == cluster_id][['x', 'y', 't']].copy()
+            cluster_data = dataset[dataset['cluster_id_predicted'] == cluster_id][['x', 'y', 'normalized_time']].copy()
             cluster_data_positions = cluster_data[['x', 'y']].values
 
-            if len(cluster_data_positions) > 3:
+            if len(cluster_data_positions) >= 3:
                 hull = ConvexHull(cluster_data_positions)
 
                 for simplex in hull.simplices:
-                    ax0.plot(cluster_data_positions[simplex, 0], cluster_data_positions[simplex, 1], c=cmap(cluster_data['t'].mean()))
+                    ax0.plot(cluster_data_positions[simplex, 0], cluster_data_positions[simplex, 1], c=cmap(cluster_data['normalized_time'].mean()))
 
         cbaxes = inset_axes(ax0, width="30%", height="3%", loc=3)
-        fmt = lambda x, pos: f'       {x}' if pos == 0 else f'{x}s        '
-        cbar = plt.colorbar(sm, cax=cbaxes, orientation='horizontal', ticks=[min_dataset_time, max_dataset_time], ticklocation='top', format=FuncFormatter(fmt))
+        fmt = lambda x, pos: r'     $t_{min}$' if pos == 0 else r'$t_{max}$'
+        cbar = plt.colorbar(sm, cax=cbaxes, orientation='horizontal', ticks=[0, 1], ticklocation='top', format=FuncFormatter(fmt))
         cbar.ax.xaxis.set_tick_params(pad=0, labelsize=10)
         cbar.set_label('Time', color='white', fontsize=10, labelpad=-7)
         plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='white')
 
     plt.show()
+    #plt.savefig('a.png',dpi=300)
