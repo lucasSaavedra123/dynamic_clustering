@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 import matplotlib
+from matplotlib.ticker import MaxNLocator
 import keras.backend as K
 from scipy.spatial import Delaunay
 import more_itertools as mit
@@ -438,7 +439,17 @@ def build_graph_with_spatio_temporal_criterion(full_nodes_dataset, radius, noffr
         )
 
 
-def styled_plotting(dataset_path, t_limit=None, detection_alpha=0.1, with_clustering=False, spatial_unit='um', save_plot=False, plot_trajectories=False):
+def styled_plotting(
+        dataset_path,
+        t_limit=None,
+        x_limit=None,
+        y_limit=None,
+        detection_alpha=0.1,
+        with_clustering=False,
+        spatial_unit='um',
+        save_plot=False,
+        plot_trajectories=False
+    ):
     """
     This function recreates localization datasets plotting from the following paper:
 
@@ -459,6 +470,16 @@ def styled_plotting(dataset_path, t_limit=None, detection_alpha=0.1, with_cluste
     dataset['normalized_time'] = dataset['t'] - dataset['t'].min()
     dataset['normalized_time'] /= dataset['normalized_time'].max()
 
+    if x_limit is not None:
+        assert x_limit[0] <= x_limit[1]
+        dataset = dataset[dataset['x'] >= x_limit[0]].copy()
+        dataset = dataset[dataset['x'] <= x_limit[1]].copy()
+
+    if y_limit is not None:
+        assert y_limit[0] <= y_limit[1]
+        dataset = dataset[dataset['y'] >= y_limit[0]].copy()
+        dataset = dataset[dataset['y'] <= y_limit[1]].copy()
+
     if CLUSTER_ID_COLUMN_NAME+'_predicted' in dataset.columns and with_clustering:
         cluster_ids = np.unique(dataset[CLUSTER_ID_COLUMN_NAME+'_predicted'].values).tolist()
         cluster_ids.remove(0)
@@ -478,9 +499,10 @@ def styled_plotting(dataset_path, t_limit=None, detection_alpha=0.1, with_cluste
 
     ax0.set_facecolor("k")
     ax0.set_xlabel(f"X [{spatial_unit}]")
-    ax0.set_ylabel(f"Y [{spatial_unit}]")	
-    xlims = plt.xlim()
-    ylims = plt.ylim()
+    ax0.set_ylabel(f"Y [{spatial_unit}]")
+
+    xlims = plt.xlim() if x_limit is None else plt.xlim(x_limit)
+    ylims = plt.ylim() if y_limit is None else plt.ylim(y_limit)
 
     cmap = matplotlib.cm.get_cmap('brg')
     ax0.imshow([[0,1], [0,1]], extent = (xlims[0],xlims[1],ylims[0],ylims[1]), cmap = cmap, interpolation = 'bicubic', alpha=0)
@@ -510,12 +532,19 @@ def styled_plotting(dataset_path, t_limit=None, detection_alpha=0.1, with_cluste
         cbaxes = inset_axes(ax0, width="30%", height="3%", loc=3)
         fmt = lambda x, pos: r'     $t_{min}$' if pos == 0 else r'$t_{max}$'
         cbar = plt.colorbar(sm, cax=cbaxes, orientation='horizontal', ticks=[0, 1], ticklocation='top', format=FuncFormatter(fmt))
-        cbar.ax.xaxis.set_tick_params(pad=0, labelsize=10)
+        cbar.ax.xaxis.set_tick_params(pad=0, labelsize=15)
         
         #cbar.set_label('Time', color='white', fontsize=10, labelpad=-7)
         plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='white')
 
+    ax0.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax0.yaxis.set_major_locator(MaxNLocator(integer=True))
+
     if save_plot:
-        plt.savefig(dataset_path+'_styled_figure.png',dpi=700)
+        if x_limit is not None or y_limit is not None:
+            plt.savefig(dataset_path+'_styled_figure_sub_roi.png',dpi=700, bbox_inches='tight', pad_inches=0)
+        else:
+            plt.savefig(dataset_path+'_styled_figure.png',dpi=700, bbox_inches='tight', pad_inches=0)
+            
     else:
         plt.show()
