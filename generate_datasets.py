@@ -86,12 +86,19 @@ for file_number in file_number_generator:
                 save_memory = True
             )
 
+            images_path = f'{file_number}_images'
+
+            if not os.path.exists(images_path):
+                os.mkdir(images_path)
+
             an_experiment.save_summary(path=os.path.join(directory_path, f"{file_number}_specs.txt"))
+            an_experiment.save_plot(images_path)
             print(file_number, 0)
 
             for i in range(1, 1000):
                 print(file_number, i)
                 an_experiment.move()
+                an_experiment.save_plot(images_path)
 
             an_experiment.build_smlm_dataset_as_dataframe().to_csv(os.path.join(directory_path, f"{file_number}_{file_suffix}.csv"), index=False)
             resimulate=False
