@@ -86,11 +86,6 @@ for file_number in file_number_generator:
                 save_memory = True
             )
 
-            images_path = f'{file_number}_images'
-
-            if not os.path.exists(images_path):
-                os.mkdir(images_path)
-
             an_experiment.save_summary(path=os.path.join(directory_path, f"{file_number}_specs.txt"))
             print(file_number, 0)
 
