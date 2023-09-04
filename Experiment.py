@@ -3,6 +3,8 @@ import os
 
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 from scipy.stats import skewnorm
@@ -173,7 +175,7 @@ class Experiment():
           initial_particles=[]
     )
 
-  def plot(self, t=None, show=False):
+  def plot(self, t=None, show=False, dpi=300, path='./'):
     if t is None:
       t = -1
 
@@ -212,7 +214,12 @@ class Experiment():
     #ax.set_ylim([cluster.position_at(t)[1]-cluster.radio, cluster.position_at(t)[1]+cluster.radio])
 
     if show:
-      plt.show()
+      fig.show()
+    else:
+      fig.savefig(os.path.join(path, f"{str(self.time).zfill(10)}.jpg"), dpi=dpi)
+
+    plt.close(fig)
+    #plt.close()
 
   def move(self):
     self.time += 1
@@ -435,10 +442,8 @@ class Experiment():
   def current_time(self):
     return self.time * self.frame_rate
 
-  def save_plot(self, path="./", dpi=200):
-    self.plot(show=False)
-    plt.savefig(os.path.join(path, f"{str(self.time).zfill(10)}.jpg"), dpi=dpi)
-    plt.close()
+  def save_plot(self, path="./", dpi=300):
+    self.plot(show=False, path=path, dpi=dpi)
 
   @property
   def summary_as_string(self):
