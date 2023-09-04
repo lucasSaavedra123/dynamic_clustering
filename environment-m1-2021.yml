@@ -56,7 +56,7 @@ dependencies:
       - cycler==0.11.0
       - cythonbuilder==0.1.20
       - decorator==5.1.1
-      - deeptrack==1.5.2
+      - deeptrack @ git+https://github.com/lucasSaavedra123/DeepTrack2@develop
       - dm-tree==0.1.8
       - docutils==0.19
       - etils==1.2.0

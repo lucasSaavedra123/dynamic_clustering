@@ -1,4 +1,4 @@
-# Live-cell clustering analysis for multi-level characterization of membrane protein aggregation
+# Decoding dynamic membrane protein aggregation with supervised Graph-based deep learning
 
 In this repository, all software related with REFERENCE_TO_PAPER (including simulation software) can be found.
 
