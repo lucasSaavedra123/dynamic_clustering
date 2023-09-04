@@ -16,6 +16,13 @@ from CONSTANTS import *
 from utils import custom_norm
 
 
+class ExperimentException(Exception):
+  """
+  Raised when experiment finds an imposible condition (e.g, no particles in the experiment)
+  """
+
+
+
 def custom_mean(vector):
 
   number_of_elements = 0
@@ -281,6 +288,9 @@ class Experiment():
 
   def recharge_batteries(self):
     all_particles = [particle for particle in self.all_particles if particle.in_fov()]
+
+    if len(all_particles) == 0:
+      raise ExperimentException("No Particles in FOV or No particles in the Experiment. Please, resimulate")
 
     if self.first_recharge == True:
       self.first_recharge = False
