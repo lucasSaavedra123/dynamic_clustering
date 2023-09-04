@@ -54,7 +54,7 @@ dependencies:
       - cloudpickle==2.2.1
       - contourpy==1.0.7
       - cycler==0.11.0
-      - cythonbuilder 0.1.20
+      - cythonbuilder==0.1.20
       - decorator==5.1.1
       - deeptrack==1.5.2
       - dm-tree==0.1.8
