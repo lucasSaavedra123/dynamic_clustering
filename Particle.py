@@ -167,6 +167,11 @@ class Particle():
     elif axis=='y':
       generated_displacement = next(self.displacement_generator_y_as_iterator)
 
+    """
+    These steps are similar to
+    https://github.com/AnDiChallenge/andi_datasets/blob/b4249e105545c48835af4c4f6d595fa6f23810a4/andi_datasets/models_phenom.py#L67C1-L67C1
+    """
+
     generated_displacement *= np.sqrt(self.experiment.maximum_frame)**(self.anomalous_exponent)
     generated_displacement *= np.sqrt(2*self.diffusion_coefficient*self.experiment.frame_rate)
 
