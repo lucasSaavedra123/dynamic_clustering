@@ -43,7 +43,7 @@ def filter_dataset_from_arguments(args, dataset):
 
     return dataset
 
-def generate_colors_for_cluster_ids(cluster_ids, discriminator=None):
+def generate_colors_for_cluster_ids(cluster_ids):
     color_list = ['red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown', 'olive', 'cyan', 'black', 'magenta', 'navy', 'lime', 'darkred']
     
     id_to_color = {}
@@ -53,13 +53,7 @@ def generate_colors_for_cluster_ids(cluster_ids, discriminator=None):
         cluster_ids.remove(0)
 
     for index, cluster_id in enumerate(cluster_ids):
-        if discriminator is not None:
-            if cluster_id == discriminator:
-                id_to_color[cluster_id] = color_list[0]
-            else:
-                id_to_color[cluster_id] = 'grey'
-        else:
-            id_to_color[cluster_id] = color_list[index % len(color_list)]
+        id_to_color[cluster_id] = color_list[index % len(color_list)]
 
     return id_to_color
 

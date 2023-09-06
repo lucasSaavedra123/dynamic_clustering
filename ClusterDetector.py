@@ -168,50 +168,53 @@ class ClusterDetector():
 
         return full_dataset.reset_index(drop=True)
 
-    def predict(self, magik_dataset, apply_threshold=True, detect_clusters=True, verbose=True, original_dataset_path=None):
+    def predict(self, magik_dataset, apply_threshold=True, detect_clusters=True, verbose=True, original_dataset_path=None, suppose_perfect_classification=False, grapht=None, real_edges_weights=None):
         assert not(not apply_threshold and detect_clusters), 'Cluster Detection cannot be performed without threshold apply'
 
         if len(magik_dataset) != 0:
             magik_dataset = magik_dataset.copy()
-
-            grapht, real_edges_weights = self.build_graph(magik_dataset, verbose=False, return_real_edges_weights=True)
+            
+            if grapht is None and real_edges_weights is None:
+                grapht, real_edges_weights = self.build_graph(magik_dataset, verbose=False, return_real_edges_weights=True)
 
             predictions = np.empty((len(grapht[0][1]), 1))
 
             number_of_edges = len(grapht[0][2])
             partitions_initial_index = list(range(0,number_of_edges,self.hyperparameters['partition_size']))
             
-            for index, initial_index in enumerate(partitions_initial_index):
-                if index == len(partitions_initial_index)-1:
-                    final_index = number_of_edges
-                else:
-                    final_index = partitions_initial_index[index+1]
+            if not suppose_perfect_classification:
+                for index, initial_index in enumerate(partitions_initial_index):
+                    if index == len(partitions_initial_index)-1:
+                        final_index = number_of_edges
+                    else:
+                        final_index = partitions_initial_index[index+1]
 
-                considered_edges_features = grapht[0][1][initial_index:final_index]
-                considered_edges = grapht[0][2][initial_index:final_index]
-                considered_edges_weights = grapht[0][3][initial_index:final_index]
+                    considered_edges_features = grapht[0][1][initial_index:final_index]
+                    considered_edges = grapht[0][2][initial_index:final_index]
+                    considered_edges_weights = grapht[0][3][initial_index:final_index]
 
-                considered_nodes = np.unique(considered_edges.flatten())
-                considered_nodes_features = grapht[0][0][considered_nodes]
+                    considered_nodes = np.unique(considered_edges.flatten())
+                    considered_nodes_features = grapht[0][0][considered_nodes]
 
-                old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
-                considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
+                    old_index_to_new_index = {old_index:new_index for new_index, old_index in enumerate(considered_nodes)}
+                    considered_edges = np.vectorize(old_index_to_new_index.get)(considered_edges)
 
-                v = [
-                    np.expand_dims(considered_nodes_features, 0),
-                    np.expand_dims(considered_edges_features, 0),
-                    np.expand_dims(considered_edges, 0),
-                    np.expand_dims(considered_edges_weights, 0),
-                ]
+                    v = [
+                        np.expand_dims(considered_nodes_features, 0),
+                        np.expand_dims(considered_edges_features, 0),
+                        np.expand_dims(considered_edges, 0),
+                        np.expand_dims(considered_edges_weights, 0),
+                    ]
 
-                with get_device():
-                    raw_predictions = self.magik_architecture(v).numpy()
-                    predictions[initial_index:final_index] = (raw_predictions > self.threshold)[0, ...] if apply_threshold else (raw_predictions)[0, ...]
+                    with get_device():
+                        raw_predictions = self.magik_architecture(v).numpy()
+                        predictions[initial_index:final_index] = (raw_predictions > self.threshold)[0, ...] if apply_threshold else (raw_predictions)[0, ...]
+            else:
+                predictions = grapht[1][1]
 
             if not detect_clusters:
                 return grapht[1][1], predictions
 
-            #edges_to_remove = np.where(grapht[1][1] == 0)[0] #Perfect classification
             edges_to_remove = np.where(predictions == 0)[0]
             remaining_edges_keep = np.delete(grapht[0][2], edges_to_remove, axis=0)
 
@@ -223,30 +226,27 @@ class ClusterDetector():
                 G=nx.Graph()
                 G.add_weighted_edges_from(np.hstack((remaining_edges_keep, remaining_edges_weights)))  #Weighted Graph
 
-                """
-                #Connected Components
-                cluster_sets = nx.connected_components(G)
-                """
+                if suppose_perfect_classification:
+                    #Connected Components
+                    cluster_sets = nx.connected_components(G)
+                else:
+                    #Louvain Method with Weights
+                    cluster_sets = nx.community.louvain_communities(G, weight='weight')
 
+                    """
+                    #Louvain Method without Weights
+                    cluster_sets = nx.community.louvain_communities(G, weight=None)
+                    """
 
-                #Louvain Method with Weights
-                cluster_sets = nx.community.louvain_communities(G, weight='weight')
+                    """
+                    #Greedy Modularity with Weights
+                    cluster_sets = nx.community.greedy_modularity_communities(G, weight='weight')
+                    """
 
-
-                """
-                #Louvain Method without Weights
-                cluster_sets = nx.community.louvain_communities(G, weight=None)
-                """
-
-                """
-                #Greedy Modularity with Weights
-                cluster_sets = nx.community.greedy_modularity_communities(G, weight='weight')
-                """
-
-                """
-                #Greedy Modularity without Weights
-                cluster_sets = nx.community.greedy_modularity_communities(G, weight=None)
-                """
+                    """
+                    #Greedy Modularity without Weights
+                    cluster_sets = nx.community.greedy_modularity_communities(G, weight=None)
+                    """
 
                 magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
@@ -260,7 +260,7 @@ class ClusterDetector():
                     magik_dataset[MAGIK_LABEL_COLUMN_NAME] = magik_dataset[MAGIK_LABEL_COLUMN_NAME].astype(int)
 
                 #Last Correction
-                if not self.static:
+                if not self.static and not suppose_perfect_classification:
                     cluster_indexes_list = magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED].unique().tolist()
                     cluster_id_index = 0
 

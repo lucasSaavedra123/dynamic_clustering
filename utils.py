@@ -16,6 +16,13 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.spatial import ConvexHull
 from matplotlib.ticker import FuncFormatter
+import tqdm
+import keras.backend as K
+from scipy.spatial import Delaunay
+import more_itertools as mit
+import tqdm
+from operator import is_not
+from functools import partial
 
 from CONSTANTS import *
 
@@ -28,6 +35,14 @@ def save_numbers_in_file(file_name, list_of_numbers):
     with open(file_name, "w") as new_file:
         for number in list_of_numbers:
             new_file.write(str(number)+'\n')
+
+def save_number_lists_in_file(file_name, lists_of_numbers):
+    with open(file_name, "w") as new_file:
+        for list_of_numbers in lists_of_numbers:
+            new_line = ''
+            for number in list_of_numbers[:-1]:
+                new_line += str(number)+','
+            new_file.write(new_line+str(list_of_numbers[-1])+'\n')
 
 def read_number_from_file(file_name, if_doesnt_exist_return=None):
     try:
@@ -369,7 +384,7 @@ def predict_on_dataset(smlm_dataset, localization_classifier, edge_classifier):
 
     return smlm_dataset
 
-def build_graph_with_spatio_temporal_criterion(full_nodes_dataset, radius, nofframes, edge_features, node_features):
+def build_graph_with_spatio_temporal_criterion(full_nodes_dataset, radius, nofframes, edge_features, node_features, return_real_edges_weights=False):
         edges_dataframe = pd.DataFrame({
             "distance": [],
             "index_1": [],
@@ -402,14 +417,24 @@ def build_graph_with_spatio_temporal_criterion(full_nodes_dataset, radius, noffr
                 df_window['distance-x'] = df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_X_POSITION_COLUMN_NAME}_y"]
                 df_window['distance-y'] = df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_x"] - df_window[f"{MAGIK_Y_POSITION_COLUMN_NAME}_y"]
                 df_window['distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2))**(1/2)
+                df_window['t-difference'] = df_window[f"{TIME_COLUMN_NAME}_x"] - df_window[f"{TIME_COLUMN_NAME}_y"]
+                df_window['real_distance'] = ((df_window['distance-x']**2) + (df_window['distance-y']**2) + (df_window['t-difference']**2))**(1/2)
                 df_window = df_window[df_window['distance'] < radius]
+
+                same_cluster_series_boolean = (df_window[MAGIK_LABEL_COLUMN_NAME+"_x"] == df_window[MAGIK_LABEL_COLUMN_NAME+"_y"])
+                x_index_is_clustered_series_boolean = (df_window[MAGIK_LABEL_COLUMN_NAME+"_x"] != 0)
+                y_index_is_clustered_series_boolean = (df_window[MAGIK_LABEL_COLUMN_NAME+"_y"] != 0)
+                there_are_only_clustered_localization_series_boolean = x_index_is_clustered_series_boolean & y_index_is_clustered_series_boolean
+                df_window['same_cluster'] = (same_cluster_series_boolean & there_are_only_clustered_localization_series_boolean)
 
                 edges = [sorted(edge) for edge in df_window[["index_x", "index_y"]].values.tolist()]
 
                 new_edges_dataframe = pd.concat([new_edges_dataframe, pd.DataFrame({
                     'index_1': [edge[0] for edge in edges],
                     'index_2': [edge[1] for edge in edges],
-                    'distance': [value[0] for value in df_window[["distance"]].values.tolist()]
+                    'distance': [value[0] for value in df_window[["distance"]].values.tolist()],
+                    'real_distance': [value[0] for value in df_window[["real_distance"]].values.tolist()],
+                    'same_cluster': [value[0] for value in df_window[["same_cluster"]].values.tolist()]
                 })], ignore_index=True)
 
             new_edges_dataframe = new_edges_dataframe.drop_duplicates()
@@ -424,7 +449,7 @@ def build_graph_with_spatio_temporal_criterion(full_nodes_dataset, radius, noffr
         edgeweights = np.stack((np.arange(0, edgeweights.shape[0]), edgeweights), axis=1)
 
         nfsolution = full_nodes_dataset[[MAGIK_LABEL_COLUMN_NAME]].to_numpy()
-        efsolution = np.zeros((len(edgefeatures), 1))
+        efsolution = edges_dataframe[['same_cluster']].to_numpy().astype(int)
 
         nodesets = full_nodes_dataset[[MAGIK_DATASET_COLUMN_NAME]].to_numpy().astype(int)
         edgesets = edges_dataframe[[MAGIK_DATASET_COLUMN_NAME]].to_numpy().astype(int)
@@ -432,12 +457,16 @@ def build_graph_with_spatio_temporal_criterion(full_nodes_dataset, radius, noffr
 
         global_property = np.zeros(np.unique(full_nodes_dataset[MAGIK_DATASET_COLUMN_NAME]).shape[0])
 
-        return (
+        grapht = (
             (nodefeatures, edgefeatures, sparseadjmtx, edgeweights),
             (nfsolution, efsolution, global_property),
             (nodesets, edgesets, framesets)
         )
 
+        if return_real_edges_weights:
+            return grapht, edges_dataframe['real_distance'].to_numpy()
+        else:
+            return grapht
 
 def styled_plotting(
         dataset_path,
