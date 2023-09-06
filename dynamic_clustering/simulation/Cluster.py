@@ -23,7 +23,7 @@ class Cluster():
       new_position,
       0,
       (cluster1.centroid_diffusion_coefficient + cluster2.centroid_diffusion_coefficient) / 2,
-      np.random.choice([cluster1.retention_probability_function.__class__, cluster2.retention_probability_function.__class__], 1)[0],
+      np.random.choice([cluster1.immobilization_probability_function.__class__, cluster2.immobilization_probability_function.__class__], 1)[0],
       np.random.choice([cluster1.lifetime, cluster2.lifetime], 1)[0],
       np.random.choice([cluster1.eccentricity_maximum, cluster2.eccentricity_maximum], 1)[0],
       cluster1.experiment,
@@ -82,7 +82,7 @@ class Cluster():
     particle.going_out_from_cluster = False
     particle.time_belonging_cluster = self.experiment.current_time
 
-  def __init__(self, radio, initial_position, number_of_initial_particles, centroid_diffusion_coefficient, retention_probability_function, lifetime, eccentricity_maximum, experiment, initial_particles=[]):
+  def __init__(self, radio, initial_position, number_of_initial_particles, centroid_diffusion_coefficient, immobilization_probability_function, lifetime, eccentricity_maximum, experiment, initial_particles=[]):
     self.radio = radio
     self.number_of_particles_leaving_cluster = 0
     self.positions = np.array([initial_position])
@@ -90,7 +90,7 @@ class Cluster():
     self.experiment = experiment
     self.number_of_particles_going_out = 0
     self.eccentricity_maximum = eccentricity_maximum
-    self.retention_probability_function = retention_probability_function() # We create an instance of it
+    self.immobilization_probability_function = immobilization_probability_function() # We create an instance of it
     self.id = next(Cluster.id_obj)
     self.exist = True
     self.lifetime = lifetime
@@ -144,7 +144,7 @@ class Cluster():
 
   def probability_to_be_retained(self, particle):
     assert particle in self.particles
-    return self.retention_probability_function(particle)
+    return self.immobilization_probability_function(particle)
 
   def move(self):
     particles_without_cluster = []

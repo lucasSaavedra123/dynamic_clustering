@@ -4,7 +4,7 @@ import os
 import numpy as np
 
 from dynamic_clustering.simulation.Experiment import Experiment, ExperimentException
-from dynamic_clustering.simulation.RetentionProbabilities import *
+from dynamic_clustering.simulation.ImmobilizationProbabilities import *
 
 parser = ArgumentParser()
 parser.add_argument("-d", "--directory", dest="directory", default="./datasets")
@@ -60,8 +60,8 @@ for file_number in file_number_generator:
                 [1e-5, 0.7], #no_cluster_molecules_diffusion_coefficient_range
                 [0.358, 0.025], #residence_time_range
                 [0.1, 1.9], #anomalous_exponent_range
-                [RetentionProbabilityWithDiscreteFunction, RetentionProbabilityWithCuadraticFunction, RetentionProbabilityWithLinearFunction],
-                [0.01, 0.5], #retention_probabilities
+                [ImmobilizationProbabilityWithDiscreteFunction, ImmobilizationProbabilityWithCuadraticFunction, ImmobilizationProbabilityWithLinearFunction],
+                [0.01, 0.5], #immobilization_probabilities
                 [2, 5],
                 [25, 7000],
                 3,
