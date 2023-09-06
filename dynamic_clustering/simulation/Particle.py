@@ -1,7 +1,8 @@
 import numpy as np
 from functools import lru_cache
 import itertools
-from TrajectoryDisplacementGenerator import TrajectoryDisplacementGenerator
+
+from .TrajectoryDisplacementGenerator import TrajectoryDisplacementGenerator
 
 class Particle():
   id_obj = itertools.count(1)

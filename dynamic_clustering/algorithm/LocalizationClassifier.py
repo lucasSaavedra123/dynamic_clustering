@@ -14,8 +14,8 @@ import tqdm
 import ghostml
 from deeptrack.models.gnns.generators import ContinuousGraphGenerator
 
-from CONSTANTS import *
-from utils import *
+from ..CONSTANTS import *
+from ..utils import *
 
 
 class LocalizationClassifier():
@@ -441,24 +441,36 @@ class LocalizationClassifier():
         self.save_keras_model()
         self.save_threshold()
 
-    def load_keras_model(self):
+    def load_keras_model(self, file_path=None, raise_error=False):
         try:
             self.build_network()
-            self.magik_architecture.load_weights(self.model_file_name)
-        except FileNotFoundError:
-            print(f"WARNING: {self} has not found keras model file (file name:{self.model_file_name})")
+            selected_file_path = self.model_file_name if file_path is None else file_path
+            self.magik_architecture.load_weights(selected_file_path)
+        except FileNotFoundError as e:
+            if raise_error:
+                raise e
+            else:
+                print(f"WARNING: {self} has not found keras model file (file name:{selected_file_path})")
             return None
 
         return self.magik_architecture
 
-    def load_threshold(self):
-        self.threshold = read_number_from_file(self.threshold_file_name)
+    def load_threshold(self, file_path=None, raise_error=False):
+        selected_file_path = self.threshold_file_name if file_path is None else file_path
 
+        try:
+            self.threshold = read_number_from_file(selected_file_path)
+        except ValueError:
+            raise Exception('Threshold file should only contain a float number.')
         if self.threshold is None:
-            print(f"WARNING: {self} has not found keras model file (file name:{self.threshold_file_name})")
+            if raise_error:
+                raise Exception('Threshold file not found')
+            else:
+                print(f"WARNING: {self} has not found threshold file (file name:{selected_file_path})")
+            return None
 
         return self.threshold
 
-    def load_model(self):
-        self.load_keras_model()
-        self.load_threshold()
+    def load_model(self, keras_model_file_path=None, threshold_file_path=None, raise_error=False):
+        self.load_keras_model(file_path=keras_model_file_path, raise_error=raise_error)
+        self.load_threshold(file_path=threshold_file_path, raise_error=raise_error)

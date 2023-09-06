@@ -1,19 +1,23 @@
 from math import sqrt
 import os
 from collections import Counter
+from functools import partial
+from operator import is_not
+import more_itertools as mit
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import tqdm
-import keras.backend as K
+import matplotlib
+from matplotlib.ticker import MaxNLocator
+import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.spatial import Delaunay
-import more_itertools as mit
-import tqdm
-from operator import is_not
-from functools import partial
+from scipy.spatial import ConvexHull
+import keras.backend as K
 
-from CONSTANTS import *
+from .CONSTANTS import *
 
 
 def save_number_in_file(file_name, number):
@@ -456,3 +460,113 @@ def build_graph_with_spatio_temporal_criterion(full_nodes_dataset, radius, noffr
             return grapht, edges_dataframe['real_distance'].to_numpy()
         else:
             return grapht
+
+def styled_plotting(
+        dataset_path,
+        t_limit=None,
+        x_limit=None,
+        y_limit=None,
+        detection_alpha=0.1,
+        with_clustering=False,
+        spatial_unit='um',
+        save_plot=False,
+        plot_trajectories=False
+    ):
+    """
+    This function recreates localization datasets plotting from the following paper:
+
+    Super-resolved trajectory-derived nanoclustering analysis using spatiotemporal indexing
+    T. P. Wallis, A. Jiang, K. Young, H. Hou, K. Kudo, A. J. McCann, et al.
+    Nature Communications 2023 Vol. 14 Issue 1 Pages 3353
+    DOI: 10.1038/s41467-023-38866-y
+    """
+
+    dataset = pd.read_csv(dataset_path)
+    dataset = dataset.groupby(['x', 'y']).first().reset_index()
+
+    if t_limit is not None:
+        assert t_limit[0] <= t_limit[1]
+        dataset = dataset[dataset['t'] >= t_limit[0]].copy()
+        dataset = dataset[dataset['t'] <= t_limit[1]].copy()
+
+    dataset['normalized_time'] = dataset['t'] - dataset['t'].min()
+    dataset['normalized_time'] /= dataset['normalized_time'].max()
+
+    if x_limit is not None:
+        assert x_limit[0] <= x_limit[1]
+        dataset = dataset[dataset['x'] >= x_limit[0]].copy()
+        dataset = dataset[dataset['x'] <= x_limit[1]].copy()
+
+    if y_limit is not None:
+        assert y_limit[0] <= y_limit[1]
+        dataset = dataset[dataset['y'] >= y_limit[0]].copy()
+        dataset = dataset[dataset['y'] <= y_limit[1]].copy()
+
+    if CLUSTER_ID_COLUMN_NAME+'_predicted' in dataset.columns and with_clustering:
+        cluster_ids = np.unique(dataset[CLUSTER_ID_COLUMN_NAME+'_predicted'].values).tolist()
+        cluster_ids.remove(0)
+    else:
+        cluster_ids = []
+
+    plt.rcdefaults() 
+    font = {"family" : "Arial","size": 12} 
+    matplotlib.rc('font', **font)
+
+    ax0 = plt.subplot(111)
+    ax0.cla()
+
+    x_plot,y_plot,t_plot= dataset['x'].values.tolist(), dataset['y'].values.tolist(), dataset['t'].values.tolist()
+
+    ax0.scatter(x_plot,y_plot,c="w",s=3,linewidth=0,alpha=detection_alpha)
+
+    ax0.set_facecolor("k")
+    ax0.set_xlabel(f"X [{spatial_unit}]")
+    ax0.set_ylabel(f"Y [{spatial_unit}]")
+
+    xlims = plt.xlim() if x_limit is None else plt.xlim(x_limit)
+    ylims = plt.ylim() if y_limit is None else plt.ylim(y_limit)
+
+    cmap = matplotlib.cm.get_cmap('brg')
+    ax0.imshow([[0,1], [0,1]], extent = (xlims[0],xlims[1],ylims[0],ylims[1]), cmap = cmap, interpolation = 'bicubic', alpha=0)
+    plt.tight_layout()
+
+    if plot_trajectories:
+        for particle_id in np.unique(dataset[PARTICLE_ID_COLUMN_NAME].values).tolist():
+            particle_data = dataset[dataset[PARTICLE_ID_COLUMN_NAME] == particle_id].sort_values('t')[['x', 'y']]
+            ax0.add_artist(matplotlib.lines.Line2D(particle_data[X_POSITION_COLUMN_NAME],particle_data[Y_POSITION_COLUMN_NAME],c='w',alpha=0.25,linewidth=0.5)) 
+
+    if with_clustering:
+        cmap = matplotlib.cm.get_cmap('brg')
+        
+        sm = plt.cm.ScalarMappable(cmap=cmap)
+        sm.set_array([])
+
+        for cluster_id in cluster_ids:
+            cluster_data = dataset[dataset[CLUSTER_ID_COLUMN_NAME+'_predicted'] == cluster_id][['x', 'y', 'normalized_time']].copy()
+            cluster_data_positions = cluster_data[['x', 'y']].values
+
+            if len(cluster_data_positions) >= 3:
+                hull = ConvexHull(cluster_data_positions)
+
+                for simplex in hull.simplices:
+                    ax0.plot(cluster_data_positions[simplex, 0], cluster_data_positions[simplex, 1], c=cmap(cluster_data['normalized_time'].mean()))
+
+        cbaxes = inset_axes(ax0, width="30%", height="3%", loc=3)
+        fmt = lambda x, pos: r'     $t_{min}$' if pos == 0 else r'$t_{max}$'
+        cbar = plt.colorbar(sm, cax=cbaxes, orientation='horizontal', ticks=[0, 1], ticklocation='top', format=FuncFormatter(fmt))
+        cbar.ax.xaxis.set_tick_params(pad=0, labelsize=15)
+        
+        #cbar.set_label('Time', color='white', fontsize=10, labelpad=-7)
+        plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='white')
+
+    ax0.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax0.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+    if save_plot:
+        if x_limit is not None or y_limit is not None:
+            plt.savefig(dataset_path+'_styled_figure_sub_roi.png',dpi=700, bbox_inches='tight', pad_inches=0)
+        else:
+            plt.savefig(dataset_path+'_styled_figure.png',dpi=700, bbox_inches='tight', pad_inches=0)
+            
+    else:
+        plt.show()

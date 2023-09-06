@@ -1,12 +1,12 @@
 import os
 import time
-from utils import *
 
 import pandas as pd
 import tqdm
 
-from LocalizationClassifier import LocalizationClassifier
-from ClusterDetector import ClusterDetector
+from dynamic_clustering.algorithm.LocalizationClassifier import LocalizationClassifier
+from dynamic_clustering.algorithm.ClusterDetector import ClusterDetector
+from dynamic_clustering.utils import *
 
 
 localization_classifier = LocalizationClassifier(10,10)

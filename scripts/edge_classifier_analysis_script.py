@@ -1,5 +1,6 @@
 from keras import backend as K
-from ClusterDetector import ClusterDetector
+
+from dynamic_clustering.algorithm.ClusterDetector import ClusterDetector
 
 
 DATASET_PATH = 'datasets_shuffled'

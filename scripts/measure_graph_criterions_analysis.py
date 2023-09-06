@@ -1,16 +1,16 @@
 import os
-from utils import *
-from collections import Counter
 import time
 import pickle
+from collections import Counter
 
 import pandas as pd
 import tqdm
 from sklearn.metrics import adjusted_rand_score
 
-from ClusterDetector import ClusterDetector
-from LocalizationClassifier import LocalizationClassifier
-from CONSTANTS import *
+from dynamic_clustering.utils import *
+from dynamic_clustering.CONSTANTS import *
+from dynamic_clustering.algorithm.ClusterDetector import ClusterDetector
+from dynamic_clustering.algorithm.LocalizationClassifier import LocalizationClassifier
 
 
 RS = [0.01,0.025,0.05,0.075,0.1]

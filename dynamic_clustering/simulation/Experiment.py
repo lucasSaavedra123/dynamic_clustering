@@ -10,10 +10,10 @@ from matplotlib.patches import Ellipse
 from scipy.stats import skewnorm
 from sklearn.neighbors import NearestNeighbors
 
-from Cluster import Cluster
-from Particle import Particle
-from CONSTANTS import *
-from utils import custom_norm
+from .Cluster import Cluster
+from .Particle import Particle
+from ..CONSTANTS import *
+from ..utils import custom_norm
 
 
 class ExperimentException(Exception):

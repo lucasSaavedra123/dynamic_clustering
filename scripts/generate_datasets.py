@@ -1,16 +1,11 @@
-import numpy as np
-
-from Experiment import Experiment, ExperimentException
-from RetentionProbabilities import *
-
 from argparse import ArgumentParser
 import os
 
-"""
-THIS INCLUDES SIMULATION PARAMETERS DIFFERENT FROM ORIGINAL BECAUSE,
-FIRST, WE WANT TO FIGURE OUT HOW GNNs ARE IMPLEMENTED AND TO HAVE SOME
-DATASETS TO INITIATE IN THIS FIELD.
-"""
+import numpy as np
+
+from dynamic_clustering.simulation.Experiment import Experiment, ExperimentException
+from dynamic_clustering.simulation.RetentionProbabilities import *
+
 parser = ArgumentParser()
 parser.add_argument("-d", "--directory", dest="directory", default="./datasets")
 args = parser.parse_args()
@@ -34,9 +29,9 @@ def next_dataset_number_generator():
 file_number_generator = next_dataset_number_generator()
 
 for file_number in file_number_generator:
-    try:
-        resimulate = True
-        while resimulate:
+    resimulate = True
+    while resimulate:
+        try:
             average_localizations_per_frame = np.random.uniform(10, 100)
 
             """
@@ -95,6 +90,6 @@ for file_number in file_number_generator:
 
             an_experiment.build_smlm_dataset_as_dataframe().to_csv(os.path.join(directory_path, f"{file_number}_{file_suffix}.csv"), index=False)
             resimulate=False
-    except ExperimentException:
-        print(f"Experiment {file_number} needs resimulation...")
-        resimulate=True
+        except ExperimentException:
+            print(f"Experiment {file_number} needs resimulation...")
+            resimulate=True
