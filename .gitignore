@@ -138,6 +138,7 @@ ext/
 *.tmp
 data/
 *.md.backup
+for_delete.for_delete
 
 # *_toy.py are not uploaded to github
 *_toy.py

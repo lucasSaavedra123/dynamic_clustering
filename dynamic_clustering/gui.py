@@ -157,7 +157,7 @@ def start():
             sg.Print(f'Analyzing...', text_color='white', background_color='green', font='Courier 10')
 
             try:
-                dataset = predict_on_dataset(dataset, localization_classifier, dataset)
+                dataset = predict_on_dataset(dataset, localization_classifier, cluster_detector)
                 new_file_name = os.path.basename(values['-LOCALIZATION-DATASET-FILE-']).split('/')[-1]+".full_prediction.csv"
                 dataset.to_csv(os.path.join(values['-PATH-TO-SAVE-RESULTS-'], new_file_name), index=False)
                 sg.Print(f'FINISHED...', text_color='white', background_color='green', font='Courier 10')
