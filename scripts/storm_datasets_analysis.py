@@ -7,6 +7,7 @@ from dynamic_clustering.algorithm.LocalizationClassifier import LocalizationClas
 from dynamic_clustering.algorithm.ClusterDetector import ClusterDetector
 from dynamic_clustering.utils import predict_on_dataset
 
+
 localization_classifier = LocalizationClassifier(10,10)
 localization_classifier.load_model()
 

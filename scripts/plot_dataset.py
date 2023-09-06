@@ -1,3 +1,6 @@
+from argparse import ArgumentParser
+from argparse import BooleanOptionalAction
+
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, f1_score, adjusted_rand_score
@@ -9,8 +12,6 @@ from matplotlib.patches import Polygon
 
 from dynamic_clustering.CONSTANTS import *
 
-from argparse import ArgumentParser
-from argparse import BooleanOptionalAction
 
 def validate_range(name, a_range):
     if a_range != []:

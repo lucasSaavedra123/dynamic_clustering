@@ -1,5 +1,6 @@
 from keras import backend as K
-from LocalizationClassifier import LocalizationClassifier
+
+from dynamic_clustering.algorithm.LocalizationClassifier import LocalizationClassifier
 
 
 DATASET_PATH = 'datasets_shuffled'

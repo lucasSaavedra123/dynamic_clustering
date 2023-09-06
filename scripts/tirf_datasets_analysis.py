@@ -8,6 +8,7 @@ from dynamic_clustering.algorithm.LocalizationClassifier import LocalizationClas
 from dynamic_clustering.algorithm.ClusterDetector import ClusterDetector
 from dynamic_clustering.CONSTANTS import *
 
+
 localization_classifier = LocalizationClassifier(None,None)
 localization_classifier.load_model()
 

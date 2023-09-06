@@ -1,12 +1,11 @@
-from moviepy.editor import *
 from pathlib import Path
-
 from PIL import Image
 import PIL
 import os
 import glob
 
-#accessing path of each image
+from moviepy.editor import *
+
 
 IMAGES_PATHS = [F'./experiment_{i}_plots' for i in range(0,1)]
 
