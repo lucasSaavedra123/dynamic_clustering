@@ -138,3 +138,6 @@ ext/
 *.tmp
 data/
 *.md.backup
+
+# *_toy.py are not uploaded to github
+*_toy.py
