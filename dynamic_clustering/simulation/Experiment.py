@@ -53,8 +53,8 @@ class Experiment():
                 no_cluster_molecules_diffusion_coefficient_range,
                 residence_time_range,
                 anomalous_exponent_range,
-                retention_probabilities_functions_for_each_cluster,
-                retention_probabilities,
+                immobilization_probabilities_functions_for_each_cluster,
+                immobilization_probabilities,
                 blinking_consecutives_frames,
                 lifetime_range,
                 lifetime_skewness,
@@ -83,9 +83,9 @@ class Experiment():
     self.anomalous_exponent_range = anomalous_exponent_range
     self.height = height
     self.width = width
-    self.retention_probabilities_functions_for_each_cluster = retention_probabilities_functions_for_each_cluster
-    self.max_retention_probability = max(retention_probabilities)
-    self.min_retention_probability = min(retention_probabilities)
+    self.immobilization_probabilities_functions_for_each_cluster = immobilization_probabilities_functions_for_each_cluster
+    self.max_immobilization_probability = max(immobilization_probabilities)
+    self.min_immobilization_probability = min(immobilization_probabilities)
     self.frame_rate = frame_rate
     self.average_molecules_per_frame = average_molecules_per_frame
     self.cluster_centroids_diffusion_coefficient_range = cluster_centroids_diffusion_coefficient_range
@@ -175,7 +175,7 @@ class Experiment():
           [np.random.uniform(0, self.width), np.random.uniform(0, self.height)],
           np.random.randint(self.number_of_particles_per_cluster_range[0], self.number_of_particles_per_cluster_range[1]+1),
           np.random.uniform(self.cluster_centroids_diffusion_coefficient_range[0], self.cluster_centroids_diffusion_coefficient_range[1]),
-          np.random.choice(self.retention_probabilities_functions_for_each_cluster, 1)[0],
+          np.random.choice(self.immobilization_probabilities_functions_for_each_cluster, 1)[0],
           lifetime,
           self.eccentricity_maximum,
           self,
@@ -386,7 +386,7 @@ class Experiment():
         [self.width/2, self.height/2],
         0,
         np.random.uniform(self.cluster_centroids_diffusion_coefficient_range[0], self.cluster_centroids_diffusion_coefficient_range[1]),
-        np.random.choice(self.retention_probabilities_functions_for_each_cluster, 1)[0],
+        np.random.choice(self.immobilization_probabilities_functions_for_each_cluster, 1)[0],
         generate_skewed_normal_distribution(self.lifetime_mean, self.lifetime_std, self.lifetime_skewness, self.lifetime_range[0], self.lifetime_range[1]),
         self.eccentricity_maximum,
         self,
@@ -436,7 +436,7 @@ class Experiment():
             [self.width/2, self.height/2],
             0,
             np.random.uniform(self.cluster_centroids_diffusion_coefficient_range[0], self.cluster_centroids_diffusion_coefficient_range[1]),
-            np.random.choice(self.retention_probabilities_functions_for_each_cluster, 1)[0],
+            np.random.choice(self.immobilization_probabilities_functions_for_each_cluster, 1)[0],
             generate_skewed_normal_distribution(self.lifetime_mean, self.lifetime_std, self.lifetime_skewness, self.lifetime_range[0], self.lifetime_range[1]),
             self.eccentricity_maximum,
             self,

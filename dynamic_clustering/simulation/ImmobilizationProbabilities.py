@@ -42,7 +42,7 @@ class MiddleRegion(Region):
   def assign_width(self):
     return self.cluster.width - self.cluster.width * 0.80
 
-class RetentionProbabilityWithDiscreteFunction():
+class ImmobilizationProbabilityWithDiscreteFunction():
   def __call__(self, particle):
 
     self.build_regions(particle)
@@ -58,11 +58,11 @@ class RetentionProbabilityWithDiscreteFunction():
     particle.cluster.inner_region = InnerRegion(particle.cluster)
     particle.cluster.middle_region = MiddleRegion(particle.cluster)
 
-class RetentionProbabilityWithCuadraticFunction():
+class ImmobilizationProbabilityWithCuadraticFunction():
 
   def __call__(self, particle):
-    max_probability = particle.experiment.max_retention_probability
-    min_probability = particle.experiment.min_retention_probability
+    max_probability = particle.experiment.max_immobilization_probability
+    min_probability = particle.experiment.min_immobilization_probability
 
     if particle is not None:
       x = particle.position_at(-1)[0]
@@ -85,11 +85,11 @@ class RetentionProbabilityWithCuadraticFunction():
   
     return max(0, - ((xct/np.sqrt(4/(max_probability-min_probability)))**2/(g_ell_width/2.)**2) - ((yct/np.sqrt(4/(max_probability-min_probability)))**2/(g_ell_height/2.)**2) + max_probability)
 
-class RetentionProbabilityWithLinearFunction():
+class ImmobilizationProbabilityWithLinearFunction():
   def __call__(self, particle):
 
-    max_probability = particle.experiment.max_retention_probability
-    min_probability = particle.experiment.min_retention_probability
+    max_probability = particle.experiment.max_immobilization_probability
+    min_probability = particle.experiment.min_immobilization_probability
 
     if particle is not None:
       x = particle.position_at(-1)[0]
