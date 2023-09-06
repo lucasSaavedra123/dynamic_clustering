@@ -1,4 +1,4 @@
-from utils import styled_plotting
+from dynamic_clustering.utils import styled_plotting
 
 T_LIMIT = [7, 8]
 SUB_ROI_X_LIMIT = [1.5,3.5]

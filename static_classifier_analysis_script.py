@@ -4,9 +4,9 @@ import time
 import pandas as pd
 import tqdm
 
-from ClusterDetector import ClusterDetector
-from LocalizationClassifier import LocalizationClassifier
-from utils import predict_on_dataset, delete_file_if_exist, save_number_in_file
+from dynamic_clustering.algorithm.ClusterDetector import ClusterDetector
+from dynamic_clustering.algorithm.LocalizationClassifier import LocalizationClassifier
+from dynamic_clustering.utils import predict_on_dataset, delete_file_if_exist, save_number_in_file
 
 
 DATASET_PATH = './Training Static Datasets'

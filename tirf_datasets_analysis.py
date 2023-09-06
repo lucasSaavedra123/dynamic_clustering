@@ -1,11 +1,12 @@
 import os
+
 import pandas as pd
-from utils import predict_on_dataset
 import tqdm
 
-from CONSTANTS import *
-from LocalizationClassifier import LocalizationClassifier
-from ClusterDetector import ClusterDetector
+from dynamic_clustering.utils import predict_on_dataset
+from dynamic_clustering.algorithm.LocalizationClassifier import LocalizationClassifier
+from dynamic_clustering.algorithm.ClusterDetector import ClusterDetector
+from dynamic_clustering.CONSTANTS import *
 
 localization_classifier = LocalizationClassifier(None,None)
 localization_classifier.load_model()

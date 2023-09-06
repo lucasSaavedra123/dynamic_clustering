@@ -1,16 +1,11 @@
-import numpy as np
-
-from Experiment import Experiment, ExperimentException
-from RetentionProbabilities import *
-
 from argparse import ArgumentParser
 import os
 
-"""
-THIS INCLUDES SIMULATION PARAMETERS DIFFERENT FROM ORIGINAL BECAUSE,
-FIRST, WE WANT TO FIGURE OUT HOW GNNs ARE IMPLEMENTED AND TO HAVE SOME
-DATASETS TO INITIATE IN THIS FIELD.
-"""
+import numpy as np
+
+from dynamic_clustering.simulation.Experiment import Experiment, ExperimentException
+from dynamic_clustering.simulation.RetentionProbabilities import *
+
 parser = ArgumentParser()
 parser.add_argument("-d", "--directory", dest="directory", default="./datasets")
 args = parser.parse_args()

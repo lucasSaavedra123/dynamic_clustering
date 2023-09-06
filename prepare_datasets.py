@@ -3,7 +3,7 @@ import os
 from random import shuffle
 import pandas as pd
 from collections import Counter
-from CONSTANTS import CLUSTERIZED_COLUMN_NAME
+from dynamic_clustering.CONSTANTS import CLUSTERIZED_COLUMN_NAME
 
 shuffled_to_dir = 'datasets_shuffled'
 
