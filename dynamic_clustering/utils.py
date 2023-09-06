@@ -1,28 +1,21 @@
 from math import sqrt
 import os
 from collections import Counter
+from functools import partial
+from operator import is_not
+import more_itertools as mit
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 import matplotlib
 from matplotlib.ticker import MaxNLocator
-import keras.backend as K
-from scipy.spatial import Delaunay
-import more_itertools as mit
-from operator import is_not
-from functools import partial
 import matplotlib.pyplot as plt
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from scipy.spatial import ConvexHull
 from matplotlib.ticker import FuncFormatter
-import tqdm
-import keras.backend as K
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.spatial import Delaunay
-import more_itertools as mit
-import tqdm
-from operator import is_not
-from functools import partial
+from scipy.spatial import ConvexHull
+import keras.backend as K
 
 from .CONSTANTS import *
 
