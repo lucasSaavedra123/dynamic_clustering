@@ -1,4 +1,6 @@
 # Description: This file contains all the constants used in the project
+METHOD_NAME = 'Dynamic Clustering with GNNs'
+LAST_UPDATE = '2023-08-29'
 
 X_POSITION_COLUMN_NAME='x'
 Y_POSITION_COLUMN_NAME='y'

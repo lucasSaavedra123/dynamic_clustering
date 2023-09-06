@@ -11,17 +11,14 @@ import PySimpleGUI as sg
 import matplotlib.pyplot as plt
 import colorama
 
-#CONSTANTS
-METHOD_NAME = 'Dynamic Clustering with GNNs'
-LAST_UPDATE = '2023-08-29'
 
-
-if __name__ == '__main__':
+def start():
+    from . import CONSTANTS
     sg.theme('DARKGREY11')
     colorama.init()
     os.system('cls' if os.name == 'nt' else 'clear')
     print(f'{colorama.Fore.GREEN}=================================================={colorama.Style.RESET_ALL}')
-    print(f'{colorama.Fore.GREEN}{METHOD_NAME} {LAST_UPDATE} initialising...{colorama.Style.RESET_ALL}')
+    print(f'{colorama.Fore.GREEN}{CONSTANTS.METHOD_NAME} {CONSTANTS.LAST_UPDATE} initialising...{colorama.Style.RESET_ALL}')
     print(f'{colorama.Fore.GREEN}=================================================={colorama.Style.RESET_ALL}')
     print(F'Preparing GUI. It may takes a while... (Ignore Tensorflow Warnings)')
     #MODULE IMPORTS
@@ -32,18 +29,13 @@ if __name__ == '__main__':
     import pandas as pd
     import matplotlib.pyplot as plt
 
-    from ClusterDetector import ClusterDetector
-    from LocalizationClassifier import LocalizationClassifier
-    from dynamic_clustering.CONSTANTS import *
-
-    #CONSTANTS
-    METHOD_NAME = 'Dynamic Clustering with GNNs'
-    LAST_UPDATE = '2023-08-28'
+    from .algorithm.ClusterDetector import ClusterDetector
+    from .algorithm.LocalizationClassifier import LocalizationClassifier
 
     layout = [
         [
         sg.Text(
-            text=f"{METHOD_NAME} (Last Update: {LAST_UPDATE})",
+            text=f"{CONSTANTS.METHOD_NAME} (Last Update: {CONSTANTS.LAST_UPDATE})",
             font=('Arial Bold', 12),
             size=12,
             expand_x=True,
@@ -87,7 +79,7 @@ if __name__ == '__main__':
         [sg.Text('Current Status:', font=('Arial', 9)), sg.StatusBar('Click on "Analyze" to start...', key='-STATUS-', font=('Arial', 9))]
     ]
 
-    window = sg.Window(f"{METHOD_NAME} (Last Update: {LAST_UPDATE})", layout)
+    window = sg.Window(f"{CONSTANTS.METHOD_NAME} (Last Update: {CONSTANTS.LAST_UPDATE})", layout)
 
     i = 0
 
@@ -142,7 +134,12 @@ if __name__ == '__main__':
             try:
                 if values['-TRXYT-FILE-OPTION-']:
                     dataset = pd.read_csv(values['-LOCALIZATION-DATASET-FILE-'], sep=' ', header=None)
-                    dataset.columns= [PARTICLE_ID_COLUMN_NAME, X_POSITION_COLUMN_NAME, Y_POSITION_COLUMN_NAME, TIME_COLUMN_NAME]
+                    dataset.columns= [
+                        CONSTANTS.PARTICLE_ID_COLUMN_NAME,
+                        CONSTANTS.X_POSITION_COLUMN_NAME,
+                        CONSTANTS.Y_POSITION_COLUMN_NAME,
+                        CONSTANTS.TIME_COLUMN_NAME
+                    ]
                 else:
                     dataset = pd.read_csv(values['-LOCALIZATION-DATASET-FILE-'])
             except Exception as e:
