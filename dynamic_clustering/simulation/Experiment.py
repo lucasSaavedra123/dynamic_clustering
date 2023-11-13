@@ -142,7 +142,7 @@ class Experiment():
        if max_number_of_no_clusterized_particles == float('Inf'):
         raise Exception('max_number_of_no_clusterized_particles cannot be infinite if with_clustering is False')
        else:
-        self.particles_without_cluster = [self.generate_non_clustered_particle_for_experiment() for _ in range(max_number_of_no_clusterized_particles)]
+        self.particles_without_cluster = [self.generate_non_clustered_particle_for_experiment() for _ in range(np.random.randint(1, max_number_of_no_clusterized_particles))]
 
     self.all_particles = []
 
