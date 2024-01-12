@@ -433,23 +433,23 @@ class ClusterDetector():
 
     @property
     def train_full_graph_file_name(self):
-        return f"edge_classifier.tmp"
+        return ('static_' if self.static else "") + f"edge_classifier.tmp"
 
     @property
     def model_file_name(self):
-        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.h5"
+        return ('static_' if self.static else "") + f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.h5"
 
     @property
     def predictions_file_name(self):
-        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.csv"
+        return ('static_' if self.static else "") + f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.csv"
     
     @property
     def history_training_info_file_name(self):
-        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.json"
+        return ('static_' if self.static else "") + f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.json"
 
     @property
     def threshold_file_name(self):
-        return f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.bin"
+        return ('static_' if self.static else "") + f"edge_classifier_batch_size_{self.hyperparameters['batch_size']}_partition_{self.hyperparameters['partition_size']}.bin"
 
     def test_with_datasets_from_path(self, path, plot=False, apply_threshold=True, save_result=False, save_predictions=False, verbose=True, detect_clusters=False, check_if_predictions_file_name_exists=False, ignore_non_clustered_localizations=True):
         assert not (save_predictions and not detect_clusters)
