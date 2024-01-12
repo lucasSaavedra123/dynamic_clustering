@@ -107,7 +107,8 @@ class LocalizationClassifier():
 
         if not self.static:
             smlm_dataframe = smlm_dataframe.sort_values(TIME_COLUMN_NAME, ascending=True, inplace=False)
-
+        else:
+            smlm_dataframe = smlm_dataframe.sort_values([MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME], ascending=[True, True], inplace=False)
         return smlm_dataframe.reset_index(drop=True)
 
     def transform_magik_dataframe_to_smlm_dataset(self, magik_dataframe):

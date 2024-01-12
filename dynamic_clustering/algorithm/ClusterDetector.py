@@ -98,7 +98,11 @@ class ClusterDetector():
             smlm_dataframe[TIME_COLUMN_NAME] = smlm_dataframe[FRAME_COLUMN_NAME] / (self.hyperparameters['number_of_frames_used_in_simulations'] - 1)
             smlm_dataframe['DUMMY'] = 'to_remove'
 
-        smlm_dataframe = smlm_dataframe.sort_values(TIME_COLUMN_NAME, ascending=True, inplace=False).reset_index(drop=True)
+        if not self.static:
+            smlm_dataframe = smlm_dataframe.sort_values(TIME_COLUMN_NAME, ascending=True, inplace=False).reset_index(drop=True)
+        else:
+            smlm_dataframe = smlm_dataframe.sort_values([MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME], ascending=[True, True], inplace=False).reset_index(drop=True)
+
         smlm_dataframe['original_index_for_recovery'] = smlm_dataframe.index
 
         if ignore_non_clustered_localizations:
