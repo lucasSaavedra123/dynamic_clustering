@@ -28,8 +28,7 @@ conda activate dynamic_clustering
 
 ## How to simulate
 
-In order to reproduce datasets, please see generate_datasets.py.
-```generate_datasets.py```. This script works as an example and it is the script that we used to generated datasets in our work.
+In order to reproduce datasets, please see ```generate_datasets.py```. This script works as an example and it is the script that we used to generated datasets in our work.
 
 We strongly recommend to run the simulations with cythonbuilder. According to our experience, simulations are faster. Run the following commands to cythonize the code:
 
