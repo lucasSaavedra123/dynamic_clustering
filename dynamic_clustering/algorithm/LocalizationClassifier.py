@@ -13,6 +13,7 @@ import pandas as pd
 import tqdm
 import ghostml
 from deeptrack.models.gnns.generators import ContinuousGraphGenerator
+from tensorflow.keras.optimizers import Adam
 
 from ..CONSTANTS import *
 from ..utils import *
@@ -72,7 +73,7 @@ class LocalizationClassifier():
         )
 
         self.magik_architecture.compile(
-            optimizer='adam',
+            optimizer=Adam() if not self.static else Adam(learning_rate=0.000001),
             loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
             metrics=['accuracy', tf.keras.metrics.AUC(), positive_rate, negative_rate]
         )
