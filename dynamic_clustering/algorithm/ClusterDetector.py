@@ -153,7 +153,7 @@ class ClusterDetector():
         if not self.static:
             return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
         else:
-            return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".tsv.csv")]
+            return np.random.choice([os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".tsv.csv")], size=125, replace=False)
 
     def get_datasets_from_path(self, path, ignore_non_clustered_localizations=True, ignore_non_clustered_experiments=False):
         """
@@ -320,6 +320,14 @@ class ClusterDetector():
 
                         if not (len(cluster_dataframe) >= 5 and cluster_dataframe[TIME_COLUMN_NAME].max() - cluster_dataframe[TIME_COLUMN_NAME].min() > FRAME_RATE):
                             magik_dataset.loc[cluster_dataframe.index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
+                """
+                elif self.static and not suppose_perfect_classification:
+                    #This code needs to be improved
+                    boolean_dataframe = magik_dataset.groupby(MAGIK_LABEL_COLUMN_NAME_PREDICTED).count()[MAGIK_X_POSITION_COLUMN_NAME] >= 10
+                    for i in boolean_dataframe.index:
+                        if not boolean_dataframe.loc[i]:
+                            magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]==i] = 0
+                """
             else:
                 magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
