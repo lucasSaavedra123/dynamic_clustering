@@ -16,7 +16,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.spatial import Delaunay
 from scipy.spatial import ConvexHull
 import keras.backend as K
-
+from sklearn.metrics import f1_score, adjusted_rand_score
 from .CONSTANTS import *
 
 
@@ -360,7 +360,7 @@ def delaunay_from_dataframe(dataframe, columns_to_pick):
 
   return list_of_edges
 
-def predict_on_dataset(smlm_dataset, localization_classifier, edge_classifier):
+def predict_on_dataset(smlm_dataset, localization_classifier, edge_classifier, show_performance=False):
     TEMPORAL_FILE_NAME = 'for_delete.for_delete'
 
     magik_dataset = localization_classifier.transform_smlm_dataset_to_magik_dataframe(smlm_dataset)
@@ -374,6 +374,10 @@ def predict_on_dataset(smlm_dataset, localization_classifier, edge_classifier):
     smlm_dataset = edge_classifier.transform_magik_dataframe_to_smlm_dataset(magik_dataset)
 
     os.remove(TEMPORAL_FILE_NAME)
+
+    if show_performance:
+        print("F1 Score:", f1_score(smlm_dataset['clusterized'], smlm_dataset['clusterized_predicted']))
+        print("ARI Score:", adjusted_rand_score(smlm_dataset['cluster_id'], smlm_dataset['cluster_id_predicted']))
 
     return smlm_dataset
 

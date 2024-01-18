@@ -153,7 +153,7 @@ class ClusterDetector():
         if not self.static:
             return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".csv") and len(file_name.split('.'))==2]
         else:
-            return np.random.choice([os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".tsv.csv")], size=125, replace=False)
+            return [os.path.join(path, file_name) for file_name in os.listdir(path) if file_name.endswith(".tsv.csv")]
 
     def get_datasets_from_path(self, path, ignore_non_clustered_localizations=True, ignore_non_clustered_experiments=False):
         """
