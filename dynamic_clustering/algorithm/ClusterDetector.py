@@ -494,7 +494,7 @@ class ClusterDetector():
                 }).to_csv(self.predictions_file_name, index=False)
 
         if plot:
-            raise NotImplementedError("Plotting during testing is not implemented yet for Cluster Edge Remover")
+            self.plot_confusion_matrix(true, pred)
 
         if not detect_clusters:
             return true, pred
