@@ -30,10 +30,11 @@ edge_classifier.save_model()
 for dataset_file_path in tqdm.tqdm([os.path.join('./Validation Static Datasets', file) for file in os.listdir('./Validation Static Datasets') if file.endswith('.tsv.csv')]):
     if not os.path.isfile(dataset_file_path+".full_prediction.csv"):
         smlm_dataset = pd.read_csv(dataset_file_path)
+
         st = time.time()
-        smlm_dataset = predict_on_dataset(smlm_dataset, localization_classifier, edge_classifier)
+        smlm_dataset = predict_on_dataset(smlm_dataset, localization_classifier, edge_classifier, ignore_localization_classifier=True, show_performance=True)
         et = time.time()
 
-        #save_number_in_file(dataset_file_path+'_time.txt', et - st)
+        save_number_in_file(dataset_file_path+'_time.txt', et - st)
 
-        #smlm_dataset.to_csv(dataset_file_path+".full_prediction.csv", index=False)
+        smlm_dataset.to_csv(dataset_file_path+".full_prediction.csv", index=False)

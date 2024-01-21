@@ -360,12 +360,15 @@ def delaunay_from_dataframe(dataframe, columns_to_pick):
 
   return list_of_edges
 
-def predict_on_dataset(smlm_dataset, localization_classifier, edge_classifier, show_performance=False):
+def predict_on_dataset(smlm_dataset, localization_classifier, edge_classifier, ignore_localization_classifier=False, show_performance=False):
     TEMPORAL_FILE_NAME = 'for_delete.for_delete'
 
-    magik_dataset = localization_classifier.transform_smlm_dataset_to_magik_dataframe(smlm_dataset)
-    magik_dataset = localization_classifier.predict(magik_dataset, apply_threshold=True)
-    smlm_dataset = localization_classifier.transform_magik_dataframe_to_smlm_dataset(magik_dataset)
+    if not ignore_localization_classifier:
+        magik_dataset = localization_classifier.transform_smlm_dataset_to_magik_dataframe(smlm_dataset)
+        magik_dataset = localization_classifier.predict(magik_dataset, apply_threshold=True)
+        smlm_dataset = localization_classifier.transform_magik_dataframe_to_smlm_dataset(magik_dataset)
+    else:
+        smlm_dataset[CLUSTERIZED_COLUMN_NAME+'_predicted'] = 1
 
     smlm_dataset.to_csv(TEMPORAL_FILE_NAME)
 
@@ -376,8 +379,8 @@ def predict_on_dataset(smlm_dataset, localization_classifier, edge_classifier, s
     os.remove(TEMPORAL_FILE_NAME)
 
     if show_performance:
-        print("F1 Score:", f1_score(smlm_dataset['clusterized'], smlm_dataset['clusterized_predicted']))
-        print("ARI Score:", adjusted_rand_score(smlm_dataset['cluster_id'], smlm_dataset['cluster_id_predicted']))
+        print("F1 Score:", f1_score(smlm_dataset[CLUSTERIZED_COLUMN_NAME], smlm_dataset['clusterized_predicted']))
+        print("ARI Score:", adjusted_rand_score(smlm_dataset[CLUSTER_ID_COLUMN_NAME], smlm_dataset[CLUSTER_ID_COLUMN_NAME+'_predicted']))
 
     return smlm_dataset
 
