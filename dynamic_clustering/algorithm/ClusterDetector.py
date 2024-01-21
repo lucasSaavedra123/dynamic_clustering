@@ -320,14 +320,13 @@ class ClusterDetector():
 
                         if not (len(cluster_dataframe) >= 5 and cluster_dataframe[TIME_COLUMN_NAME].max() - cluster_dataframe[TIME_COLUMN_NAME].min() > FRAME_RATE):
                             magik_dataset.loc[cluster_dataframe.index, MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
-                """
                 elif self.static and not suppose_perfect_classification:
-                    #This code needs to be improved
+                    #This code needs to be improved. We noticed that this improved performance in static datasets
                     boolean_dataframe = magik_dataset.groupby(MAGIK_LABEL_COLUMN_NAME_PREDICTED).count()[MAGIK_X_POSITION_COLUMN_NAME] >= 10
                     for i in boolean_dataframe.index:
                         if not boolean_dataframe.loc[i]:
                             magik_dataset[magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED]==i] = 0
-                """
+
             else:
                 magik_dataset[MAGIK_LABEL_COLUMN_NAME_PREDICTED] = 0
 
