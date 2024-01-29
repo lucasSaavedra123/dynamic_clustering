@@ -477,7 +477,12 @@ def styled_plotting(
         with_clustering=False,
         spatial_unit='um',
         save_plot=False,
-        plot_trajectories=False
+        plot_trajectories=False,
+        trajectory_color='w',
+        background_color='k',
+        colorbar_color='white',
+        trajectory_alpha=0.25,
+        trajectory_linewidth=0.5
     ):
     """
     This function recreates localization datasets plotting from the following paper:
@@ -495,6 +500,8 @@ def styled_plotting(
         assert t_limit[0] <= t_limit[1]
         dataset = dataset[dataset['t'] >= t_limit[0]].copy()
         dataset = dataset[dataset['t'] <= t_limit[1]].copy()
+    else:
+        print(f"t_min={dataset['t'].min()},t_max={dataset['t'].max()}")
 
     dataset['normalized_time'] = dataset['t'] - dataset['t'].min()
     dataset['normalized_time'] /= dataset['normalized_time'].max()
@@ -524,9 +531,10 @@ def styled_plotting(
 
     x_plot,y_plot,t_plot= dataset['x'].values.tolist(), dataset['y'].values.tolist(), dataset['t'].values.tolist()
 
-    ax0.scatter(x_plot,y_plot,c="w",s=3,linewidth=0,alpha=detection_alpha)
+    if trajectory_color is None:
+        ax0.scatter(x_plot,y_plot,c=trajectory_color,s=3,linewidth=0,alpha=detection_alpha)
 
-    ax0.set_facecolor("k")
+    ax0.set_facecolor(background_color)
     ax0.set_xlabel(f"X [{spatial_unit}]")
     ax0.set_ylabel(f"Y [{spatial_unit}]")
 
@@ -537,10 +545,19 @@ def styled_plotting(
     ax0.imshow([[0,1], [0,1]], extent = (xlims[0],xlims[1],ylims[0],ylims[1]), cmap = cmap, interpolation = 'bicubic', alpha=0)
     plt.tight_layout()
 
+    COLOR_AUXILIAR = 10
+
+    if trajectory_color is None:
+        cmap = plt.cm.get_cmap('hsv', COLOR_AUXILIAR)
+
     if plot_trajectories:
         for particle_id in np.unique(dataset[PARTICLE_ID_COLUMN_NAME].values).tolist():
             particle_data = dataset[dataset[PARTICLE_ID_COLUMN_NAME] == particle_id].sort_values('t')[['x', 'y']]
-            ax0.add_artist(matplotlib.lines.Line2D(particle_data[X_POSITION_COLUMN_NAME],particle_data[Y_POSITION_COLUMN_NAME],c='w',alpha=0.25,linewidth=0.5)) 
+            
+            if trajectory_color is not None:
+                ax0.add_artist(matplotlib.lines.Line2D(particle_data[X_POSITION_COLUMN_NAME],particle_data[Y_POSITION_COLUMN_NAME],c=trajectory_color,alpha=trajectory_alpha,linewidth=trajectory_linewidth)) 
+            else:
+                ax0.add_artist(matplotlib.lines.Line2D(particle_data[X_POSITION_COLUMN_NAME],particle_data[Y_POSITION_COLUMN_NAME],c=cmap(particle_id%COLOR_AUXILIAR),alpha=trajectory_alpha,linewidth=trajectory_linewidth)) 
 
     if with_clustering:
         cmap = matplotlib.cm.get_cmap('brg')
@@ -562,9 +579,9 @@ def styled_plotting(
         fmt = lambda x, pos: r'     $t_{min}$' if pos == 0 else r'$t_{max}$'
         cbar = plt.colorbar(sm, cax=cbaxes, orientation='horizontal', ticks=[0, 1], ticklocation='top', format=FuncFormatter(fmt))
         cbar.ax.xaxis.set_tick_params(pad=0, labelsize=15)
-        
+
         #cbar.set_label('Time', color='white', fontsize=10, labelpad=-7)
-        plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='white')
+        plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color=colorbar_color)
 
     ax0.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax0.yaxis.set_major_locator(MaxNLocator(integer=True))
