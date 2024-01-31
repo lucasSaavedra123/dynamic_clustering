@@ -17,8 +17,36 @@ from scipy.spatial import Delaunay
 from scipy.spatial import ConvexHull
 import keras.backend as K
 from sklearn.metrics import f1_score, adjusted_rand_score
+from scipy.spatial import Delaunay
+
 from .CONSTANTS import *
 
+
+def calculate_area_of_dataframe(dataframe, from_magik=False):
+    if from_magik:
+        points = dataframe[[MAGIK_X_POSITION_COLUMN_NAME, MAGIK_Y_POSITION_COLUMN_NAME]].values.tolist()
+    else:
+        points = dataframe[[X_POSITION_COLUMN_NAME, Y_POSITION_COLUMN_NAME]].values.tolist()
+
+    faces = Delaunay(points).simplices
+
+    area = 0
+    for face in faces:
+        a = points[face[0]]
+        b = points[face[1]]
+        c = points[face[2]]
+        area += abs((a[0]*(b[1]-c[1]) + b[0]*(c[1]-a[1]) + c[0]*(a[1]-b[1])) / 2)
+    
+    return area
+
+def calculate_radius_of_dataframe(dataframe, from_magik=False):
+    return np.sqrt(calculate_area_of_dataframe(dataframe, from_magik=from_magik) / np.pi)
+
+def calculate_lifetime_of_dataframe(dataframe, from_magik=False):
+    return dataframe[TIME_COLUMN_NAME].max() - dataframe[TIME_COLUMN_NAME].min()
+
+def calculate_number_of_particles_of_dataframe(dataframe, from_magik=False):
+    return len(dataframe)
 
 def save_number_in_file(file_name, number):
     with open(file_name, "w") as new_file:
