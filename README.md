@@ -1,4 +1,4 @@
-# Decoding dynamic membrane protein aggregation with supervised Graph-based deep learning
+# A supervised Graph-based deep learning algorithm to detect and quantify clustered particles
 
 In this repository, all software related with REFERENCE_TO_PAPER (including simulation software) can be found.
 
