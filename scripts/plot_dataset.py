@@ -69,6 +69,7 @@ parser.add_argument("-i", "--inferenced", default=False, dest="inferenced", acti
 parser.add_argument("-a", "--show_performance", default=False, dest="show_performance", action=BooleanOptionalAction)
 parser.add_argument("-m", "--from_magic", default=False, dest="from_magic", action=BooleanOptionalAction)
 parser.add_argument("-t", "--show_tracks", default=False, dest="show_tracks", action=BooleanOptionalAction)
+parser.add_argument("-u", "--unit", default=False, dest="um")
 
 #Range Arguments
 parser.add_argument('-fr', '--frame_range', type=int, nargs='+', default=[])
@@ -167,9 +168,9 @@ if args.projection == '3d' or args.save_plots:
             for position_index in range(track_length-1):
                 ax.plot( particle_data_positions[position_index:position_index+2,0], particle_data_positions[position_index:position_index+2,1], particle_data_positions[position_index:position_index+2,2], color = particle_data['COLOR_COLUMN'].values[position_index] )
 
-    ax.set_xlabel('x[um]')
+    ax.set_xlabel(f'x[{args.unit}]')
+    ax.set_zlabel(f'y[{args.unit}]')
     ax.set_ylabel(TIME_PLOT_LABEL)
-    ax.set_zlabel('y[um]')
 
     if args.save_plots:
         plt.savefig(f"{args.filename}_3d.jpg", dpi=300)
@@ -205,8 +206,8 @@ if args.projection == '2d' or args.save_plots:
             for position_index in range(track_length-1):
                 ax.plot( particle_data_positions[position_index:position_index+2,0], particle_data_positions[position_index:position_index+2,1], color = particle_data['COLOR_COLUMN'].values[position_index] )
 
-    ax.set_xlabel('x[um]')
-    ax.set_ylabel('y[um]')
+    ax.set_xlabel(f'x[{args.unit}]', fontsize=20)
+    ax.set_ylabel(f'y[{args.unit}]', fontsize=20)
 
     if args.roi_x != []:
         ax.set_xlim(args.roi_x[0], args.roi_x[1])
@@ -216,7 +217,10 @@ if args.projection == '2d' or args.save_plots:
     ax.set_aspect('equal')
 
     if args.save_plots:
-        plt.savefig(f"{args.filename}_2d.jpg", dpi=300)
+        plt.subplots_adjust(bottom=0.15)
+        plt.yticks(fontsize=20)
+        plt.xticks(fontsize=20)
+        plt.savefig(f"{args.filename}_2d.png", dpi=1200)
     else:
         plt.show()
 
@@ -230,16 +234,18 @@ if args.show_performance:
     labels = ["Non-Clusterized", "Clusterized"]
 
     confusion_matrix_dataframe = pd.DataFrame(data=confusion_mat, index=labels, columns=labels)
-    sns.set(font_scale=1.5)
     color_map = sns.color_palette(palette="Blues", n_colors=7)
-    sns.heatmap(data=confusion_matrix_dataframe, annot=True, annot_kws={"size": 15}, cmap=color_map)
+    ax = sns.heatmap(data=confusion_matrix_dataframe, annot=True, annot_kws={"size": 15}, cmap=color_map)
+    ax.set_xticklabels(ax.get_xticklabels(),fontsize=15, rotation=0)
+    ax.set_yticklabels(ax.get_yticklabels(), fontsize=15, rotation=90)
 
-    plt.title(f'Confusion Matrix')
-    plt.rcParams.update({'font.size': 15})
-    plt.ylabel("Ground truth", fontsize=15)
-    plt.xlabel("Predicted label", fontsize=15)
-
+    plt.title(f'Confusion Matrix', fontsize=15)
+    #plt.rcParams.update({'font.size': 20})
+    #plt.ylabel("Ground truth", fontsize=10)
+    #plt.xlabel("Predicted label", fontsize=10)
+    #plt.xticks(fontsize=20)
+    #plt.yticks(fontsize=20)
     if args.save_plots:
-        plt.savefig(f"{args.filename}_confusion_matrix.jpg", dpi=300)
+        plt.savefig(f"{args.filename}_confusion_matrix.png", dpi=1200)
     else:
         plt.show()
