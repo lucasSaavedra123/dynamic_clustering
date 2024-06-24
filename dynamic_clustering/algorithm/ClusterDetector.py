@@ -24,6 +24,11 @@ from ..CONSTANTS import *
 class ClusterDetector():
     @classmethod
     def default_hyperparameters(cls):
+        """
+        partition_size can be equal to None.
+        However, this can produce memory limitations
+        during training and inference
+        """
         return {
             "partition_size": 4000,
             "epochs": 10,
@@ -184,8 +189,10 @@ class ClusterDetector():
             predictions = np.empty((len(grapht[0][1]), 1))
 
             number_of_edges = len(grapht[0][2])
-            partitions_initial_index = list(range(0,number_of_edges,self.hyperparameters['partition_size']))
-            
+            if self.hyperparameters['partition_size'] is not None:
+                partitions_initial_index = list(range(0,number_of_edges,self.hyperparameters['partition_size']))
+            else:
+                partitions_initial_index = list(range(0,number_of_edges,number_of_edges))
             if not suppose_perfect_classification:
                 for index, initial_index in enumerate(partitions_initial_index):
                     if index == len(partitions_initial_index)-1:
