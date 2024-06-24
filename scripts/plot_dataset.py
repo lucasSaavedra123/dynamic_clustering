@@ -69,7 +69,7 @@ parser.add_argument("-i", "--inferenced", default=False, dest="inferenced", acti
 parser.add_argument("-a", "--show_performance", default=False, dest="show_performance", action=BooleanOptionalAction)
 parser.add_argument("-m", "--from_magic", default=False, dest="from_magic", action=BooleanOptionalAction)
 parser.add_argument("-t", "--show_tracks", default=False, dest="show_tracks", action=BooleanOptionalAction)
-parser.add_argument("-u", "--unit", default=False, dest="um")
+parser.add_argument("-u", "--unit", default=False, dest="unit")
 
 #Range Arguments
 parser.add_argument('-fr', '--frame_range', type=int, nargs='+', default=[])
@@ -117,7 +117,8 @@ if args.inferenced and args.show_performance and args.with_clustering:
     if args.binary_clustering:
         print("F1 Score:", f1_score(dataset[CLUSTERIZED_COLUMN_NAME], dataset[CLUSTERIZED_COLUMN_NAME + '_predicted']))
     else:
-        print("ARI:", adjusted_rand_score(dataset[CLUSTER_ID_COLUMN_NAME], dataset[CLUSTER_ID_COLUMN_NAME + '_predicted']))
+        dummy = dataset[dataset[CLUSTER_ID_COLUMN_NAME] != 0]
+        print("ARI:", adjusted_rand_score(dummy[CLUSTER_ID_COLUMN_NAME], dummy[CLUSTER_ID_COLUMN_NAME + '_predicted']))
 
 if args.with_clustering:
     if args.inferenced and args.binary_clustering:
