@@ -22,6 +22,11 @@ from ..utils import *
 class LocalizationClassifier():
     @classmethod
     def default_hyperparameters(cls):
+        """
+        partition_size can be equal to None.
+        However, this can produce memory limitations
+        during training and inference
+        """
         return {
             "partition_size": 3500,
             "epochs": 100,
@@ -157,8 +162,10 @@ class LocalizationClassifier():
         predictions = np.empty((len(grapht[0][0]), 1))
 
         number_of_nodes = len(grapht[0][0])
-        partitions_initial_index = list(range(0,number_of_nodes,self.hyperparameters['partition_size']))
-
+        if self.hyperparameters['partition_size'] is not None:
+            partitions_initial_index = list(range(0,number_of_nodes,self.hyperparameters['partition_size']))
+        else:
+            partitions_initial_index = list(range(0,number_of_nodes,number_of_nodes))
         for index, initial_index in enumerate(partitions_initial_index):
             if index == len(partitions_initial_index)-1:
                 final_index = number_of_nodes
